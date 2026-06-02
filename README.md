@@ -38,6 +38,23 @@ Run the app: `npm run dev`
 - User authentication
 - Submit and manage your vibecoded apps
 
+**Database policies (RLS)**
+
+Authorization is enforced in the database via Row Level Security. Apply the
+migrations in `supabase/migrations/` with:
+
+```
+supabase db push
+```
+
+This enables RLS on `profiles` and `apps` and restricts the review workflow
+(approve/reject) and role changes to admins. Promote an admin with a SQL
+update (run as a privileged role):
+
+```sql
+update public.profiles set role = 'admin' where id = '<user-uuid>';
+```
+
 **Support**
 
 For issues or questions, please open an issue on GitHub.
