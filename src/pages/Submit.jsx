@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
+import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { checkImageSafety, uploadImage } from "@/lib/imageCheck";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
@@ -29,50 +30,6 @@ function normalizeUrl(input) {
     url = "https://" + url;
   }
   return url;
-}
-
-// ─── Safe Browsing (inline, no import) ────────────────────────
-async function checkUrlSafety(url) {
-  const API_KEY = import.meta.env.VITE_GOOGLE_SAFE_BROWSING_KEY;
-  if (!API_KEY) {
-    console.warn("No Safe Browsing API key — skipping check");
-    return { safe: true, threats: [] };
-  }
-  try {
-    const response = await fetch(
-      `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client: { clientId: "vibedgallery", clientVersion: "1.0.0" },
-          threatInfo: {
-            threatTypes: [
-              "MALWARE",
-              "SOCIAL_ENGINEERING",
-              "UNWANTED_SOFTWARE",
-              "POTENTIALLY_HARMFUL_APPLICATION",
-            ],
-            platformTypes: ["ANY_PLATFORM"],
-            threatEntryTypes: ["URL"],
-            threatEntries: [{ url }],
-          },
-        }),
-      }
-    );
-    if (!response.ok) {
-      console.warn("Safe Browsing API error:", response.status);
-      return { safe: true, threats: [] };
-    }
-    const data = await response.json();
-    if (data.matches && data.matches.length > 0) {
-      return { safe: false, threats: data.matches.map((m) => m.threatType) };
-    }
-    return { safe: true, threats: [] };
-  } catch (err) {
-    console.warn("Safe Browsing check failed, skipping:", err.message);
-    return { safe: true, threats: [] };
-  }
 }
 
 // ─── Draft helpers ─────────────────────────────────────────────
