@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabaseClient'
 
-// Generate a unique verification token
+// Generate a unique, cryptographically secure verification token
 export function generateVerificationToken() {
-  const random = Math.random().toString(36).substring(2, 10)
+  const random = crypto.randomUUID().replace(/-/g, '').slice(0, 12)
   return `vg-verify-${random}`
 }
 
@@ -42,46 +42,32 @@ export function getVerificationInstructions(siteUrl, token) {
   }
 }
 
-// Check if the verification file exists
-// Tries both .txt and .html
+// Check if the verification file exists.
+//
+// The fetch happens server-side in the `verify-ownership` Supabase Edge
+// Function so it is not blocked by CORS (which made the browser-only check
+// effectively useless).
 export async function checkOwnershipFile(siteUrl, token) {
-  const base = siteUrl.replace(/\/$/, '')
-  const txtUrl = `${base}/${token}.txt`
-  const htmlUrl = `${base}/${token}.html`
-
-  // Try .txt first
   try {
-    const res = await fetch(txtUrl, { mode: 'cors' })
-    if (res.ok) {
-      const text = await res.text()
-      if (text.trim().includes(token)) {
-        return { verified: true, method: 'txt' }
+    const { data, error } = await supabase.functions.invoke('verify-ownership', {
+      body: { siteUrl, token },
+    })
+
+    if (error) {
+      return {
+        verified: false,
+        reason: 'error',
+        note: 'Could not reach the verification service. Admin will check manually.',
       }
     }
-  } catch (e) {
-    // CORS will likely block this from browser
-    // That's okay, we'll handle it via trust + manual review
-  }
 
-  // Try .html
-  try {
-    const res = await fetch(htmlUrl, { mode: 'cors' })
-    if (res.ok) {
-      const text = await res.text()
-      if (text.includes(token)) {
-        return { verified: true, method: 'html' }
-      }
+    return data
+  } catch (e) {
+    return {
+      verified: false,
+      reason: 'error',
+      note: 'Could not reach the verification service. Admin will check manually.',
     }
-  } catch (e) {
-    // Same CORS issue
-  }
-
-  // Can't verify from browser due to CORS
-  // Return pending — admin will verify manually
-  return { 
-    verified: false, 
-    reason: 'cors',
-    note: 'Cannot verify from browser. Admin will check manually.'
   }
 }
 
