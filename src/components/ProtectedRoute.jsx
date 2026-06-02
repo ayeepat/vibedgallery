@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
@@ -9,16 +9,31 @@ const DefaultFallback = () => (
   </div>
 );
 
+/**
+ * Route guard for authenticated pages.
+ *
+ * Usage (React Router v6 layout route):
+ *   <Route element={<ProtectedRoute />}>
+ *     <Route path="/profile" element={<Profile />} />
+ *   </Route>
+ *
+ * Pass `adminOnly` to additionally require an admin role.
+ *
+ * This is a client-side UX guard only. Authorization is enforced
+ * server-side via Supabase Row Level Security.
+ */
 export default function ProtectedRoute({
   fallback = <DefaultFallback />,
-  unauthenticatedElement
+  redirectTo = '/login',
+  adminOnly = false,
 }) {
   const {
     isAuthenticated,
     isLoadingAuth,
     authChecked,
     authError,
-    checkUserAuth
+    isAdmin,
+    checkUserAuth,
   } = useAuth();
 
   useEffect(() => {
@@ -31,15 +46,16 @@ export default function ProtectedRoute({
     return fallback;
   }
 
-  if (authError) {
-    if (authError.type === 'user_not_registered') {
-      return <UserNotRegisteredError />;
-    }
-    return unauthenticatedElement;
+  if (authError?.type === 'user_not_registered') {
+    return <UserNotRegisteredError />;
   }
 
   if (!isAuthenticated) {
-    return unauthenticatedElement;
+    return <Navigate to={redirectTo} replace />;
+  }
+
+  if (adminOnly && !isAdmin) {
+    return <Navigate to="/" replace />;
   }
 
   return <Outlet />;

@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages
 import Login from './pages/Login';
@@ -38,10 +39,16 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password"  element={<ResetPassword />} />
 
-            {/* Submission + Admin */}
-            <Route path="/submit"          element={<Submit />} />
-            <Route path="/admin"           element={<Admin />} />
-            <Route path="/profile"         element={<Profile />} />
+            {/* Submission + Profile (auth required) */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/submit"        element={<Submit />} />
+              <Route path="/profile"       element={<Profile />} />
+            </Route>
+
+            {/* Admin (auth + admin role required) */}
+            <Route element={<ProtectedRoute adminOnly />}>
+              <Route path="/admin"         element={<Admin />} />
+            </Route>
 
             {/* 404 */}
             <Route path="*"               element={<PageNotFound />} />
