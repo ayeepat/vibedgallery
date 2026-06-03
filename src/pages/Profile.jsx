@@ -183,8 +183,11 @@ export default function Profile() {
   const [displayName, setDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  
+  const [displayNameError, setDisplayNameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [saveLoading, setSaveLoading] = useState(false);
+  const [displayNameLoading, setDisplayNameLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
@@ -227,19 +230,20 @@ export default function Profile() {
 
   const handleDisplayNameSave = async () => {
     if (!displayName.trim()) {
-      setPasswordError("Display name cannot be empty");
+      setDisplayNameError("Display name cannot be empty");
       return;
     }
 
-    setSaveLoading(true);
+    setDisplayNameLoading(true);
+    setDisplayNameError("");
     try {
       await updateProfile({ display_name: displayName.trim() });
       setSuccessMessage("Display name updated!");
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (err) {
-      setPasswordError(err.message || "Failed to update display name");
+      setDisplayNameError(err.message || "Failed to update display name");
     }
-    setSaveLoading(false);
+    setDisplayNameLoading(false);
   };
 
   const handlePasswordChange = async () => {
@@ -260,7 +264,7 @@ export default function Profile() {
       return;
     }
 
-    setSaveLoading(true);
+    setPasswordLoading(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
@@ -272,7 +276,7 @@ export default function Profile() {
     } catch (err) {
       setPasswordError(err.message || "Failed to change password");
     }
-    setSaveLoading(false);
+    setPasswordLoading(false);
   };
 
   const handleSubmissionAction = async (action, app) => {
@@ -424,10 +428,10 @@ export default function Profile() {
               </div>
               <button
                 onClick={handleDisplayNameSave}
-                disabled={saveLoading}
+                disabled={displayNameLoading}
                 className="w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {saveLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Save Changes"}
+                {displayNameLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Save Changes"}
               </button>
             </div>
 
@@ -472,10 +476,10 @@ export default function Profile() {
 
               <button
                 onClick={handlePasswordChange}
-                disabled={saveLoading}
+                disabled={passwordLoading}
                 className="w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
               >
-                {saveLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Change Password"}
+                {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : "Change Password"}
               </button>
             </div>
 

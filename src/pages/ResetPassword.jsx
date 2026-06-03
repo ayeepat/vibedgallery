@@ -290,7 +290,7 @@ export default function ResetPassword() {
           VibedGallery © 2025
         </span>
         <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-          A Museum of the Digital Avant-Garde.
+          Apps built with AI, shared by their makers.
         </span>
       </div>
 

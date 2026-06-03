@@ -20,16 +20,16 @@ export default function Home() {
         <div className="w-[60%] border-r border-[#E5E5E5] flex flex-col justify-between p-12">
           <div className="flex-1 flex flex-col justify-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-6">
-              The Gallery of Vibe-Coded Software
+              A gallery for apps built with AI
             </p>
             <h1
               className="text-[clamp(2.5rem,5vw,5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
             >
-              THE<br />GALLERY<br />OF INTENT.
+              SEE WHAT<br />PEOPLE<br />ARE BUILDING.
             </h1>
             <p className="mt-6 text-sm text-[#717171] max-w-xs leading-relaxed">
-              A curated collection of the most compelling vibe-coded applications. Discover, admire, and contribute to the digital avant-garde.
+              A collection of real apps built with AI coding tools. Browse them, try them, and add your own.
             </p>
           </div>
 
@@ -108,7 +108,7 @@ export default function Home() {
 
       <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
         <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">A museum of the digital avant-garde.</span>
+        <span className="text-xs text-[#717171]">Apps built with AI, shared by the people who made them.</span>
       </footer>
 
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />

@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
 import { checkImageSafety, uploadImage } from "@/lib/imageCheck";
+import { sendEmail } from "@/lib/edgeFunctions";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
 
@@ -260,8 +261,10 @@ export default function Submit() {
   const [form, setForm] = useState(() => loadDraft() || defaultForm);
   const [thumbnail, setThumbnail] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const [thumbnailStatus, setThumbnailStatus] = useState("idle");
   const [screenshots, setScreenshots] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("idle");
   const [errors, setErrors] = useState({});
   const [globalError, setGlobalError] = useState("");
   const [step, setStep] = useState("form");
@@ -291,14 +294,22 @@ export default function Submit() {
   }, [form, step]);
 
   const handleThumbnail = async (file) => {
-    const check = await checkImageSafety(file);
-    if (!check.safe) {
-      setErrors((e) => ({ ...e, thumbnail: check.errors.join(", ") }));
-      return;
+    setThumbnailStatus("checking");
+    try {
+      const check = await checkImageSafety(file);
+      if (!check.safe) {
+        setErrors((e) => ({ ...e, thumbnail: check.errors.join(", ") }));
+        setThumbnailStatus("error");
+        return;
+      }
+      setErrors((e) => ({ ...e, thumbnail: null }));
+      setThumbnail(file);
+      setThumbnailPreview(URL.createObjectURL(file));
+      setThumbnailStatus("ready");
+    } catch (err) {
+      setErrors((e) => ({ ...e, thumbnail: "Failed to process image" }));
+      setThumbnailStatus("error");
     }
-    setErrors((e) => ({ ...e, thumbnail: null }));
-    setThumbnail(file);
-    setThumbnailPreview(URL.createObjectURL(file));
   };
 
   const handleScreenshot = async (file) => {
@@ -340,12 +351,15 @@ export default function Submit() {
 
     try {
       const appUrl = normalizeUrl(form.url);
-      console.log("1. URL normalized:", appUrl);
 
-      // Safe browsing — fails open (never blocks on API error)
-      console.log("2. Checking URL safety...");
+      // Safe browsing check
       const safety = await checkUrlSafety(appUrl);
-      console.log("3. Safety result:", safety);
+
+      if (safety.error) {
+        setGlobalError(safety.error);
+        setLoading(false);
+        return;
+      }
 
       if (!safety.safe) {
         setGlobalError(
@@ -356,23 +370,23 @@ export default function Submit() {
       }
 
       // Upload thumbnail
-      console.log("4. Uploading thumbnail...");
+      setUploadProgress("uploading_thumbnail");
       const thumbnailUrl = await uploadImage(thumbnail, user.id, "thumbnails");
-      console.log("5. Thumbnail uploaded:", thumbnailUrl);
 
       // Upload screenshots
       const screenshotUrls = [];
-      for (const s of screenshots) {
-        const url = await uploadImage(s.file, user.id, "screenshots");
+      for (let i = 0; i < screenshots.length; i++) {
+        setUploadProgress(`uploading_screenshot_${i + 1}/${screenshots.length}`);
+        const url = await uploadImage(screenshots[i].file, user.id, "screenshots");
         screenshotUrls.push(url);
       }
+
+      setUploadProgress("inserting_database");
 
       const token = generateVerificationToken();
       const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 5);
       const demoUrl = form.demoVideoUrl ? normalizeUrl(form.demoVideoUrl) : null;
       const githubUrl = form.githubRepo ? normalizeUrl(form.githubRepo) : null;
-
-      console.log("6. Inserting into database...");
 
       const { data, error } = await supabase
         .from("apps")
@@ -405,7 +419,19 @@ export default function Submit() {
         throw new Error(error.message);
       }
 
-      console.log("7. Success! App ID:", data.id);
+      // Fire-and-forget emails: confirmation to submitter + alert to admin.
+      // Failures are logged inside sendEmail and never block submission.
+      const emailApp = {
+        id: data.id,
+        title: data.title,
+        tagline: data.tagline,
+        url: data.url,
+        submitter_email: data.submitter_email,
+        category: data.category,
+        primary_tool: data.primary_tool,
+      };
+      sendEmail("submission_confirmation", emailApp);
+      sendEmail("admin_notification", emailApp);
 
       clearDraft();
       setVerificationToken(token);
@@ -573,7 +599,7 @@ export default function Submit() {
         </div>
         <div className="h-12 border-t border-[#E5E5E5] flex items-center px-6 justify-between">
           <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">VibedGallery © 2025</span>
-          <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">A Museum of the Digital Avant-Garde.</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Apps built with AI, shared by their makers.</span>
         </div>
       </div>
     );
@@ -609,7 +635,7 @@ export default function Submit() {
         </div>
         <div className="h-12 border-t border-[#E5E5E5] flex items-center px-6 justify-between">
           <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">VibedGallery © 2025</span>
-          <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">A Museum of the Digital Avant-Garde.</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Apps built with AI, shared by their makers.</span>
         </div>
       </div>
     );
@@ -827,8 +853,25 @@ export default function Submit() {
             </div>
           </div>
 
-          {/* Submit button */}
+          {/* Submit button with progress */}
           <div className="border-t border-[#E5E5E5]">
+            {loading && uploadProgress && uploadProgress !== "idle" && (
+              <div className="px-8 py-4 bg-[#F5F5F5] border-b border-[#E5E5E5]">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
+                  {uploadProgress === "uploading_thumbnail" && "Uploading thumbnail..."}
+                  {uploadProgress.includes("uploading_screenshot") && `${uploadProgress}`}
+                  {uploadProgress === "inserting_database" && "Finalizing submission..."}
+                </p>
+                <div className="w-full h-1 bg-[#E5E5E5]">
+                  <div 
+                    className="h-full bg-black transition-all"
+                    style={{
+                      width: uploadProgress === "inserting_database" ? "95%" : "60%"
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             <button type="submit" disabled={loading}
               className="w-full h-16 flex items-center justify-between px-8 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <span className="text-[10px] font-bold uppercase tracking-widest">
@@ -845,7 +888,7 @@ export default function Submit() {
 
       <div className="h-12 border-t border-[#E5E5E5] flex items-center px-8 justify-between">
         <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">VibedGallery © 2025</span>
-        <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">A Museum of the Digital Avant-Garde.</span>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Apps built with AI, shared by their makers.</span>
       </div>
     </div>
   );

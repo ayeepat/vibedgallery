@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Loader2 } from "lucide-react";
@@ -17,6 +17,18 @@ export default function Register() {
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
   const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [hasResent, setHasResent] = useState(false);
+
+  // ─── Cooldown timer effect ────────────────────────────────
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => {
+        setResendCooldown(resendCooldown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   // ─── Step 1: Register ──────────────────────────────────────
   const handleRegister = async (e) => {
@@ -38,14 +50,27 @@ export default function Register() {
       setStep("verify");
       setMessage("Check your email for a 6-digit verification code.");
     } catch (err) {
+      const msg = err?.message || "";
+
       if (
-        err.message.includes("already registered") ||
-        err.message.includes("already exists") ||
-        err.message.includes("User already registered")
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("User already registered")
       ) {
-        setError("An account with this email already exists.");
+        setError("An account with this email already exists. Try signing in instead.");
+      } else if (
+        (msg.includes("after") && msg.includes("seconds")) ||
+        msg.toLowerCase().includes("rate limit") ||
+        msg.toLowerCase().includes("security purposes")
+      ) {
+        // Supabase rate-limit: a code was very likely already sent on the
+        // first attempt, so move the user forward to enter it.
+        setStep("verify");
+        setMessage("A code was already sent. Check your email and enter it below.");
+      } else if (msg.toLowerCase().includes("load failed") || msg.toLowerCase().includes("fetch")) {
+        setError("Network error reaching the server. Check your connection and try again.");
       } else {
-        setError(err.message || "Something went wrong. Try again.");
+        setError(msg || "Something went wrong. Try again.");
       }
     } finally {
       setLoading(false);
@@ -84,6 +109,8 @@ export default function Register() {
     try {
       await resendOtp(email);
       setMessage("New code sent. Check your email.");
+      setResendCooldown(60);
+      setHasResent(true);
     } catch (err) {
       setError(err.message || "Failed to resend. Try again.");
     } finally {
@@ -181,20 +208,39 @@ export default function Register() {
           <div className="mt-0 border-l border-r border-b border-[#E5E5E5]">
             <button
               onClick={handleResend}
-              disabled={resending}
-              className="h-10 w-full flex items-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50"
+              disabled={resending || resendCooldown > 0}
+              className="h-10 w-full flex items-center justify-between px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {resending ? "Sending..." : "Resend Code"}
+              <span>
+                {resending ? "Sending..." : resendCooldown > 0 ? `Resend Code (${resendCooldown}s)` : "Resend Code"}
+              </span>
             </button>
           </div>
 
-          {/* Back */}
+          {/* Change Email Button */}
           <button
-            onClick={() => { setStep("register"); setError(""); setOtp(""); }}
-            className="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors text-left"
+            onClick={() => { 
+              setStep("register"); 
+              setError(""); 
+              setMessage("");
+              setOtp("");
+              setResendCooldown(0);
+              setEmail("");
+              setPassword("");
+              setConfirm("");
+            }}
+            className="mt-4 h-10 border border-[#E5E5E5] rounded flex items-center justify-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors"
           >
-            ← Use a different email
+            Change Email
           </button>
+
+          {/* Already confirmed via email link */}
+          <Link
+            to="/login"
+            className="mt-8 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors text-left"
+          >
+            Confirmed via email link? Sign in →
+          </Link>
 
         </div>
 
@@ -203,7 +249,7 @@ export default function Register() {
             VibedGallery © 2025
           </span>
           <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-            A Museum of the Digital Avant-Garde.
+            Apps built with AI, shared by their makers.
           </span>
         </div>
 
@@ -230,17 +276,16 @@ export default function Register() {
         <div className="hidden lg:flex w-[45%] border-r border-[#E5E5E5] flex-col justify-between p-12">
           <div className="flex-1 flex flex-col justify-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-6">
-              The Gallery of Vibe-Coded Software
+              A gallery for apps built with AI
             </p>
             <h1
               className="text-[clamp(2.5rem,4vw,4.5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
             >
-              JOIN THE<br />AVANT-<br />GARDE.
+              CREATE AN<br />ACCOUNT.
             </h1>
             <p className="mt-6 text-sm text-[#717171] max-w-xs leading-relaxed">
-              Create an account to submit your vibe-coded applications,
-              follow creators, and shape the gallery.
+              Sign up to submit your apps, follow other builders, and save the ones you like.
             </p>
           </div>
 
@@ -384,7 +429,7 @@ export default function Register() {
           VibedGallery © 2025
         </span>
         <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-          A Museum of the Digital Avant-Garde.
+          Apps built with AI, shared by their makers.
         </span>
       </div>
 

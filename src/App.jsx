@@ -4,6 +4,7 @@ import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import ScrollToTop from './components/ScrollToTop';
 
 // Pages
@@ -21,35 +22,37 @@ import Profile from './pages/Profile';
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <ScrollToTop />
-          <Routes>
-            {/* Public */}
-            <Route path="/"                element={<Home />} />
-            <Route path="/gallery"         element={<Gallery />} />
-            <Route path="/app/:id"         element={<AppDetail />} />
-            <Route path="/how-it-works"    element={<HowItWorks />} />
+    <ErrorBoundary>
+      <Router>
+        <AuthProvider>
+          <QueryClientProvider client={queryClientInstance}>
+            <ScrollToTop />
+            <Routes>
+              {/* Public */}
+              <Route path="/"                element={<Home />} />
+              <Route path="/gallery"         element={<Gallery />} />
+              <Route path="/app/:id"         element={<AppDetail />} />
+              <Route path="/how-it-works"    element={<HowItWorks />} />
 
-            {/* Auth */}
-            <Route path="/login"           element={<Login />} />
-            <Route path="/register"        element={<Register />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset-password"  element={<ResetPassword />} />
+              {/* Auth */}
+              <Route path="/login"           element={<Login />} />
+              <Route path="/register"        element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password"  element={<ResetPassword />} />
 
-            {/* Submission + Admin */}
-            <Route path="/submit"          element={<Submit />} />
-            <Route path="/admin"           element={<Admin />} />
-            <Route path="/profile"         element={<Profile />} />
+              {/* Submission + Admin */}
+              <Route path="/submit"          element={<Submit />} />
+              <Route path="/admin"           element={<Admin />} />
+              <Route path="/profile"         element={<Profile />} />
 
-            {/* 404 */}
-            <Route path="*"               element={<PageNotFound />} />
-          </Routes>
-          <Toaster />
-        </QueryClientProvider>
-      </AuthProvider>
-    </Router>
+              {/* 404 */}
+              <Route path="*"               element={<PageNotFound />} />
+            </Routes>
+            <Toaster />
+          </QueryClientProvider>
+        </AuthProvider>
+      </Router>
+    </ErrorBoundary>
   )
 }
 

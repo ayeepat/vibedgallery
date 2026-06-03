@@ -34,7 +34,7 @@ export async function checkImageSafety(file) {
 }
 
 function getImageDimensions(file) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image()
     const url = URL.createObjectURL(file)
     img.onload = () => {
@@ -43,7 +43,7 @@ function getImageDimensions(file) {
     }
     img.onerror = () => {
       URL.revokeObjectURL(url)
-      resolve({ width: 999, height: 999 })
+      reject(new Error('Failed to load image. Please check the file and try again.'))
     }
     img.src = url
   })

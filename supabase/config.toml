@@ -1,0 +1,7 @@
+project_id = "hgujctmkbmcfpxjhqkzo"
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.verify-html]
+verify_jwt = true

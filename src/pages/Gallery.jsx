@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
 import UploadModal from "../components/UploadModal";
@@ -11,7 +11,7 @@ export default function Gallery() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [hoveredId, setHoveredId] = useState(null);
 
-  const filtered = (() => {
+  const filtered = useMemo(() => {
     let list = activeFilter === "Trending" || activeFilter === "Newest"
       ? [...APPS]
       : APPS.filter(app => app.tool === activeFilter);
@@ -20,7 +20,7 @@ export default function Gallery() {
     if (activeFilter === "Newest") list.sort((a, b) => b.id - a.id);
 
     return list;
-  })();
+  }, [activeFilter]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -98,7 +98,7 @@ export default function Gallery() {
 
       <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
         <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">A museum of the digital avant-garde.</span>
+        <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
       </footer>
 
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />

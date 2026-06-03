@@ -1,7 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import Nav from "../components/Nav";
 import { APPS } from "../data/apps";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/lib/supabaseClient";
 import UploadModal from "../components/UploadModal";
 
 export default function AppDetail() {
@@ -63,7 +65,7 @@ export default function AppDetail() {
 
           <div className="flex flex-col gap-2 shrink-0">
             {/* Upvote */}
-            <UpvoteButton app={app} />
+            <UpvoteButton appId={app.id} initialUpvotes={app.upvotes} />
             {/* Visit */}
             <a
               href={app.url}
@@ -87,7 +89,7 @@ export default function AppDetail() {
           {[
             { label: "Category", value: app.category },
             { label: "Built With", value: app.tool },
-            { label: "Upvotes", value: app.upvotes },
+            { label: "Upvotes", value: <UpvoteCount appId={app.id} initialCount={app.upvotes} /> },
           ].map((item, i) => (
             <div
               key={item.label}
@@ -102,7 +104,7 @@ export default function AppDetail() {
 
       <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
         <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">A museum of the digital avant-garde.</span>
+        <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
       </footer>
 
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
@@ -110,17 +112,99 @@ export default function AppDetail() {
   );
 }
 
-function UpvoteButton({ app }) {
+function UpvoteCount({ appId, initialCount }) {
+  const [count, setCount] = useState(initialCount);
+
+  useEffect(() => {
+    const fetchUpvotes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('upvotes')
+          .select('id')
+          .eq('app_id', appId);
+        
+        if (!error && data) {
+          setCount(data.length);
+        }
+      } catch (err) {
+        console.error('Error fetching upvotes:', err);
+      }
+    };
+
+    fetchUpvotes();
+  }, [appId]);
+
+  return <>{count}</>;
+}
+
+function UpvoteButton({ appId, initialUpvotes }) {
+  const { user } = useAuth();
   const [upvoted, setUpvoted] = useState(false);
-  const [count, setCount] = useState(app.upvotes);
+  const [count, setCount] = useState(initialUpvotes);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setUpvoted(false);
+      return;
+    }
+
+    const checkUpvoted = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('upvotes')
+          .select('id')
+          .eq('app_id', appId)
+          .eq('user_id', user.id)
+          .single();
+        
+        setUpvoted(!error && !!data);
+      } catch (err) {
+        setUpvoted(false);
+      }
+    };
+
+    checkUpvoted();
+  }, [appId, user]);
+
+  const handleUpvote = async () => {
+    if (!user) {
+      alert('Please log in to upvote.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (upvoted) {
+        await supabase
+          .from('upvotes')
+          .delete()
+          .eq('app_id', appId)
+          .eq('user_id', user.id);
+        
+        setCount(c => c - 1);
+        setUpvoted(false);
+      } else {
+        await supabase
+          .from('upvotes')
+          .insert({ app_id: appId, user_id: user.id });
+        
+        setCount(c => c + 1);
+        setUpvoted(true);
+      }
+    } catch (err) {
+      console.error('Error updating upvote:', err);
+      alert('Failed to update upvote. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <button
-      onClick={() => {
-        if (!upvoted) { setCount(c => c + 1); setUpvoted(true); }
-        else { setCount(c => c - 1); setUpvoted(false); }
-      }}
-      className={`h-12 px-8 text-[10px] font-bold uppercase tracking-widest border transition-colors flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-black ${
+      onClick={handleUpvote}
+      disabled={loading}
+      className={`h-12 px-8 text-[10px] font-bold uppercase tracking-widest border transition-colors flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-black disabled:opacity-50 disabled:cursor-not-allowed ${
         upvoted ? "bg-black text-white border-black" : "bg-white text-black border-[#E5E5E5] hover:border-black"
       }`}
     >

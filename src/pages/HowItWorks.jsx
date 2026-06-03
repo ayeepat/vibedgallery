@@ -7,7 +7,7 @@ const STEPS = [
   {
     number: "01",
     title: "Discover",
-    body: "Browse a curated gallery of vibe-coded apps and websites built by developers, designers, and dreamers. Filter by tool, sort by trending, and find your next source of inspiration.",
+    body: "Browse a gallery of apps and websites built with AI coding tools by developers, designers, and hobbyists. Filter by tool, sort by trending, and find something new to try.",
   },
   {
     number: "02",

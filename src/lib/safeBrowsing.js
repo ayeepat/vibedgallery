@@ -2,8 +2,8 @@ const API_KEY = import.meta.env.VITE_GOOGLE_SAFE_BROWSING_KEY
 
 export async function checkUrlSafety(url) {
   if (!API_KEY) {
-    console.warn('No Safe Browsing API key found')
-    return { safe: true, threats: [] }
+    console.warn('No Safe Browsing API key found. URL safety check skipped.')
+    return { safe: true, threats: [], skipped: true }
   }
 
   try {
@@ -43,7 +43,7 @@ export async function checkUrlSafety(url) {
     return { safe: true, threats: [] }
   } catch (err) {
     console.error('Safe Browsing check failed:', err)
-    // Fail open — don't block submission if API fails
-    return { safe: true, threats: [] }
+    // Fail closed — warn user if API fails
+    return { safe: false, threats: ['API_ERROR'], error: 'Could not verify URL safety. Please try again.' }
   }
 }

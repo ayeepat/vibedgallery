@@ -10,6 +10,14 @@ export function generateVerificationToken() {
 // Supports both .txt and .html
 export function getVerificationInstructions(siteUrl, token) {
   const base = siteUrl.replace(/\/$/, '')
+  
+  // Escape HTML entities in token to prevent XSS
+  const escapedToken = token
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
 
   return {
     token,
@@ -30,7 +38,7 @@ export function getVerificationInstructions(siteUrl, token) {
     htmlFile: {
       filename: `${token}.html`,
       url: `${base}/${token}.html`,
-      content: `<!DOCTYPE html><html><head><meta name="vibedgallery-verification" content="${token}"></head><body>${token}</body></html>`,
+      content: `<!DOCTYPE html><html><head><meta name="vibedgallery-verification" content="${escapedToken}"></head><body>${escapedToken}</body></html>`,
       instructions: [
         `Create a file called ${token}.html`,
         `Copy the HTML content below into the file`,

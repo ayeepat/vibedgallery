@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
+import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
 import Nav from "@/components/Nav";
-import { Loader2, Check, X, ExternalLink } from "lucide-react";
+import { Loader2, Check, X, ExternalLink, Search } from "lucide-react";
 
 const STATUS_COLORS = {
   pending_verification: "#717171",
@@ -28,9 +29,11 @@ export default function Admin() {
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("pending_review")
+  const [search, setSearch] = useState("")
   const [selected, setSelected] = useState(null)
   const [rejectionReason, setRejectionReason] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
 
   // Check admin status
   useEffect(() => {
@@ -59,16 +62,26 @@ export default function Admin() {
   // Fetch apps
   useEffect(() => {
     if (!isAdmin) return
-    fetchApps()
-  }, [isAdmin, filter])
+    const t = setTimeout(fetchApps, search.trim() ? 250 : 0)
+    return () => clearTimeout(t)
+  }, [isAdmin, filter, search])
 
   const fetchApps = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from("apps")
-      .select("*")
-      .eq("status", filter)
-      .order("created_at", { ascending: false })
+    const term = search.trim()
+
+    let query = supabase.from("apps").select("*")
+
+    // Admin search queries ALL statuses; otherwise scope to the active tab.
+    if (term) {
+      query = query.or(
+        `title.ilike.%${term}%,tagline.ilike.%${term}%,submitter_email.ilike.%${term}%`
+      )
+    } else {
+      query = query.eq("status", filter)
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false })
 
     if (!error) setApps(data || [])
     setLoading(false)
@@ -76,11 +89,29 @@ export default function Admin() {
 
   const handleApprove = async (app) => {
     setActionLoading(true)
+    setVerifyResult(null)
     try {
+      // Server-side check that the verification file really exists at the URL.
+      let result = { verified: true }
+      if (app.verification_token && app.url) {
+        result = await verifyHtml(app.url, app.verification_token)
+        setVerifyResult(result)
+        if (!result.verified) {
+          const proceed = window.confirm(
+            `Ownership file NOT found at ${app.url} (${result.reason || "no match"}).\n\nApprove anyway?`
+          )
+          if (!proceed) {
+            setActionLoading(false)
+            return
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("apps")
         .update({
           status: "approved",
+          ownership_verified: result.verified,
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
         })
@@ -88,10 +119,17 @@ export default function Admin() {
 
       if (error) throw error
 
-      // Send approval email via Supabase
-      // For now just update UI
+      // Notify the submitter their app is live.
+      sendEmail("approved", {
+        id: app.id,
+        title: app.title,
+        url: app.url,
+        submitter_email: app.submitter_email,
+      })
+
       setApps((prev) => prev.filter((a) => a.id !== app.id))
       setSelected(null)
+      setVerifyResult(null)
 
     } catch (err) {
       console.error(err)
@@ -118,6 +156,17 @@ export default function Admin() {
         .eq("id", app.id)
 
       if (error) throw error
+
+      // Notify the submitter with the rejection reason.
+      sendEmail(
+        "rejected",
+        {
+          id: app.id,
+          title: app.title,
+          submitter_email: app.submitter_email,
+        },
+        { rejectionReason }
+      )
 
       setApps((prev) => prev.filter((a) => a.id !== app.id))
       setSelected(null)
@@ -157,8 +206,28 @@ export default function Admin() {
           </h1>
         </div>
 
+        {/* Search — admins search across ALL statuses */}
+        <div className="border-b border-[#E5E5E5] px-8 py-3 flex items-center gap-3">
+          <Search className="w-4 h-4 text-[#717171] shrink-0" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setSelected(null) }}
+            placeholder="Search all submissions — title, tagline, or email..."
+            className="flex-1 h-8 text-xs text-black bg-transparent placeholder:text-[#AAAAAA] focus:outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors"
+            >
+              Clear ✕
+            </button>
+          )}
+        </div>
+
         {/* Filter tabs */}
-        <div className="border-b border-[#E5E5E5] flex">
+        <div className={`border-b border-[#E5E5E5] flex ${search.trim() ? "opacity-40 pointer-events-none" : ""}`}>
           {Object.entries(STATUS_LABELS).map(([key, label]) => (
             <button
               key={key}
@@ -185,14 +254,14 @@ export default function Admin() {
             ) : apps.length === 0 ? (
               <div className="p-8 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
-                  No apps in this category
+                  {search.trim() ? `No results for "${search.trim()}"` : "No apps in this category"}
                 </p>
               </div>
             ) : (
               apps.map((app) => (
                 <button
                   key={app.id}
-                  onClick={() => { setSelected(app); setRejectionReason("") }}
+                  onClick={() => { setSelected(app); setRejectionReason(""); setVerifyResult(null) }}
                   className={`w-full text-left border-b border-[#E5E5E5] p-4 hover:bg-[#F5F5F5] transition-colors ${
                     selected?.id === app.id ? "bg-[#F5F5F5]" : ""
                   }`}
@@ -209,7 +278,7 @@ export default function Admin() {
                         {app.submitter_email}
                       </p>
                     </div>
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex flex-col items-end gap-1">
                       <span
                         className="text-[8px] font-bold uppercase tracking-widest px-2 py-1"
                         style={{
@@ -218,6 +287,9 @@ export default function Admin() {
                           background: `${STATUS_COLORS[app.status]}11`,
                         }}
                       >
+                        {STATUS_LABELS[app.status] || app.status}
+                      </span>
+                      <span className="text-[8px] font-bold uppercase tracking-widest text-[#717171]">
                         {app.safe_browsing_passed ? "✓ Safe" : "⚠ Flagged"}
                       </span>
                     </div>
@@ -277,9 +349,10 @@ export default function Admin() {
                     ["Submitted By", selected.submitter_email],
                     ["Twitter", selected.submitter_twitter],
                     ["GitHub", selected.submitter_github],
-                    ["Ownership Verified", selected.ownership_verified ? "Yes" : "No"],
+                    ["Ownership Verified", selected.ownership_verified ? "Yes (trusted — not re-checked)" : "No"],
                     ["Safe Browsing", selected.safe_browsing_passed ? "Passed ✓" : `Failed — ${selected.safe_browsing_threats?.join(", ")}`],
                     ["Verification Token", selected.verification_token],
+                    ["Verification File", selected.verification_token ? `${selected.verification_token}.html` : null],
                   ].filter(([, v]) => v).map(([label, value]) => (
                     <div key={label} className="flex border-b border-[#E5E5E5] last:border-0">
                       <div className="w-40 shrink-0 px-4 py-3 bg-[#F5F5F5] border-r border-[#E5E5E5]">
@@ -295,6 +368,16 @@ export default function Admin() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-1 hover:underline"
+                            >
+                              {value}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ) : label === "Verification File" ? (
+                            <a
+                              href={`${(selected.url || "").replace(/\/+$/, "")}/${value}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 hover:underline font-mono"
                             >
                               {value}
                               <ExternalLink className="w-3 h-3" />
@@ -325,6 +408,41 @@ export default function Admin() {
                 {/* Actions */}
                 {(selected.status === "pending_review" || selected.status === "pending_verification") && (
                   <div className="border border-[#E5E5E5]">
+
+                    {/* Verification result */}
+                    {verifyResult && (
+                      <div
+                        className="px-4 py-3 border-b border-[#E5E5E5]"
+                        style={{
+                          color: verifyResult.verified ? STATUS_COLORS.approved : STATUS_COLORS.rejected,
+                          background: verifyResult.verified ? `${STATUS_COLORS.approved}11` : `${STATUS_COLORS.rejected}11`,
+                        }}
+                      >
+                        <p className="text-[10px] font-bold uppercase tracking-widest">
+                          {verifyResult.verified
+                            ? `✓ Ownership file verified (${verifyResult.method})`
+                            : `⚠ Ownership file not found — ${verifyResult.reason || "no match"}`}
+                        </p>
+                        {!verifyResult.verified && verifyResult.checked?.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[9px] font-bold uppercase tracking-widest opacity-70">
+                              Checked these URLs:
+                            </p>
+                            {verifyResult.checked.map((u) => (
+                              <a
+                                key={u}
+                                href={u}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-[10px] font-mono underline break-all hover:opacity-70"
+                              >
+                                {u}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Rejection reason */}
                     <div className="border-b border-[#E5E5E5]">

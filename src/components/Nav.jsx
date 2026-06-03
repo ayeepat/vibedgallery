@@ -58,9 +58,12 @@ export default function Nav({ hideSearch = false }) {
             )}
 
             {/* Username */}
-            <div className="h-8 px-4 flex items-center border-t border-b border-r border-[#E5E5E5] text-[9px] font-bold uppercase tracking-widest text-[#717171] whitespace-nowrap">
+            <Link
+              to="/profile"
+              className="h-8 px-4 flex items-center border-t border-b border-r border-[#E5E5E5] text-[9px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors whitespace-nowrap"
+            >
               {user?.email?.split("@")[0]}
-            </div>
+            </Link>
 
             {/* Sign Out */}
             <button

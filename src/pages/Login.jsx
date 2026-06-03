@@ -61,7 +61,7 @@ export default function Login() {
         <div className="hidden lg:flex w-[45%] border-r border-[#E5E5E5] flex-col justify-between p-12">
           <div className="flex-1 flex flex-col justify-center">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-6">
-              The Gallery of Vibe-Coded Software
+              A gallery for apps built with AI
             </p>
             <h1
               className="text-[clamp(2.5rem,4vw,4.5rem)] font-black uppercase leading-[0.9] text-black"
@@ -70,8 +70,7 @@ export default function Login() {
               WELCOME<br />BACK.
             </h1>
             <p className="mt-6 text-sm text-[#717171] max-w-xs leading-relaxed">
-              Sign in to submit your creations, curate your collection,
-              and contribute to the digital avant-garde.
+              Sign in to submit your apps, save the ones you like, and keep up with what people are building.
             </p>
           </div>
 
@@ -221,7 +220,7 @@ export default function Login() {
           VibedGallery © 2025
         </span>
         <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-          A Museum of the Digital Avant-Garde.
+          Apps built with AI, shared by their makers.
         </span>
       </div>
 
