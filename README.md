@@ -1,6 +1,6 @@
-# Vibe Gallery
+# Vibed Gallery
 
-**Welcome to VibeGallery** 
+**Welcome to VibedGallery** 
 
 **About**
 
