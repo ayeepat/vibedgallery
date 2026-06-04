@@ -4,8 +4,15 @@ import { useAuth } from "@/lib/AuthContext";
 import { Loader2 } from "lucide-react";
 import GoogleIcon from "@/components/GoogleIcon";
 import GithubIcon from "@/components/GithubIcon";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 export default function Login() {
+  usePageMeta({
+    title: "Sign In",
+    description: "Sign in to VibedGallery to submit apps, save favorites, and follow other makers.",
+    path: "/login",
+  });
+
   const { login, signInWithProvider } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

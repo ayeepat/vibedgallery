@@ -1,0 +1,16 @@
+# https://vibedgallery.com — robots
+# Generative AI search at Google (AI Overviews / AI Mode) uses the same
+# crawler and index as classic Search, so we just need to be openly
+# crawlable for Googlebot and the rest. No special llms.txt or AI-only
+# markup is required (per Google's own guidance).
+
+User-agent: *
+Allow: /
+
+# Don't index user-only flows
+Disallow: /auth/callback
+Disallow: /reset-password
+Disallow: /forgot-password
+Disallow: /admin
+
+Sitemap: https://vibedgallery.com/sitemap.xml

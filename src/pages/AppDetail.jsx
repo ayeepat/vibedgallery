@@ -1,16 +1,62 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Nav from "../components/Nav";
+import Footer from "@/components/Footer";
 import { useApp, useMaker } from "@/lib/useApps";
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 export default function AppDetail() {
   const { id } = useParams();
   const { data: app, isLoading, error } = useApp(id);
   const { data: maker } = useMaker(app?.user_id);
+
+  // Per-app meta. usePageMeta safely handles undefined values — it falls back
+  // to defaults until the app row resolves.
+  const structuredData = useMemo(() => {
+    if (!app) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "CreativeWork",
+      name: app.name,
+      headline: app.name,
+      description: app.tagline || app.description,
+      image: app.image,
+      url: `https://vibedgallery.com/app/${app.id}`,
+      datePublished: app.created_at,
+      author: maker?.name
+        ? { "@type": "Person", name: maker.name }
+        : { "@type": "Organization", name: "VibedGallery Maker" },
+      genre: app.category,
+      keywords: [app.category, app.tool, ...(app.tags || [])]
+        .filter(Boolean)
+        .join(", "),
+      aggregateRating:
+        typeof app.upvotes === "number" && app.upvotes > 0
+          ? {
+              "@type": "AggregateRating",
+              ratingValue: 5,
+              ratingCount: app.upvotes,
+              bestRating: 5,
+              worstRating: 1,
+            }
+          : undefined,
+    };
+  }, [app, maker]);
+
+  usePageMeta({
+    title: app ? `${app.name} — ${app.tagline || app.category}` : "App",
+    description: app
+      ? (app.description || app.tagline || `${app.name} — built with ${app.tool}.`).slice(0, 200)
+      : "App details on VibedGallery.",
+    path: `/app/${id || ""}`,
+    image: app?.image,
+    type: "article",
+    structuredData,
+  });
 
   if (isLoading) {
     return (
@@ -143,10 +189,7 @@ export default function AppDetail() {
         </div>
       </div>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

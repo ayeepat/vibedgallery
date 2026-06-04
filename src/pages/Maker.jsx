@@ -1,9 +1,11 @@
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
 import { useMaker, useApprovedAppsByMaker } from "@/lib/useApps";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { Loader2 } from "lucide-react";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 const heroVariants = {
   hidden: { opacity: 0, y: 16 },
@@ -27,6 +29,15 @@ export default function Maker() {
   const { userId } = useParams();
   const { data: maker, isLoading: makerLoading } = useMaker(userId);
   const { data: apps = [], isLoading: appsLoading } = useApprovedAppsByMaker(userId);
+
+  usePageMeta({
+    title: maker?.name ? `${maker.name} — Maker` : "Maker",
+    description: maker?.name
+      ? `Apps built and submitted by ${maker.name} on VibedGallery.`
+      : "Apps built and submitted by makers on VibedGallery.",
+    path: `/maker/${userId || ""}`,
+    type: "profile",
+  });
 
   if (makerLoading) {
     return (
@@ -188,14 +199,7 @@ export default function Maker() {
         </section>
       </main>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">
-          VibedGallery
-        </span>
-        <span className="text-xs text-[#717171]">
-          Apps built with AI, shared by their makers.
-        </span>
-      </footer>
+      <Footer />
     </div>
   );
 }

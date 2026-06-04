@@ -26,6 +26,8 @@ import Submit from './pages/Submit';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
 import Maker from './pages/Maker';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 
 const wrap = (el) => <PageTransition>{el}</PageTransition>;
 
@@ -40,6 +42,8 @@ function AnimatedRoutes() {
         <Route path="/app/:id"         element={wrap(<AppDetail />)} />
         <Route path="/maker/:userId"   element={wrap(<Maker />)} />
         <Route path="/how-it-works"    element={wrap(<HowItWorks />)} />
+        <Route path="/terms"           element={wrap(<Terms />)} />
+        <Route path="/privacy"         element={wrap(<Privacy />)} />
 
         {/* Auth */}
         <Route path="/login"           element={wrap(<Login />)} />

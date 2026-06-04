@@ -2,7 +2,9 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import Nav from "../components/Nav";
+import Footer from "@/components/Footer";
 import { useApprovedApps } from "@/lib/useApps";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 const MARQUEE_NAMES = [
   "TASKVIBE", "PROMPTCRM", "FLOWDESK", "NICHEAI", "TONELAB", "WAVEFORM",
@@ -30,6 +32,13 @@ const cardVariants = {
 };
 
 export default function Home() {
+  usePageMeta({
+    title: "A gallery of apps built with AI",
+    description:
+      "VibedGallery is a curated gallery of real apps built with AI coding tools. Browse trending apps, try them, and submit your own.",
+    path: "/",
+  });
+
   const { data: apps = [] } = useApprovedApps();
   const trending = useMemo(
     () => [...apps].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).slice(0, 6),
@@ -176,10 +185,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">Apps built with AI, shared by the people who made them.</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

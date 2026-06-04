@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import Nav from "../components/Nav";
+import Footer from "@/components/Footer";
 import { useApprovedApps } from "@/lib/useApps";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 const SORTS = ["Newest", "Trending"];
 // Mirrors CATEGORIES in src/pages/Submit.jsx so the dropdown can never offer
@@ -26,6 +28,13 @@ const cardVariants = {
 };
 
 export default function Gallery() {
+  usePageMeta({
+    title: "Gallery — Apps built with AI",
+    description:
+      "Browse a curated collection of real apps built with AI coding tools. Filter by category, sort by trending or newest, and discover what people are shipping.",
+    path: "/gallery",
+  });
+
   const [sort, setSort] = useState("Newest");
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [hoveredId, setHoveredId] = useState(null);
@@ -210,10 +219,7 @@ export default function Gallery() {
         )}
       </div>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

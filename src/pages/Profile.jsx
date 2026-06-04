@@ -5,7 +5,9 @@ import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
 import { SubmissionCardSkeleton } from "@/components/Skeleton";
+import { usePageMeta } from "@/lib/usePageMeta";
 import {
   Loader2,
   Download,
@@ -165,6 +167,13 @@ export default function Profile() {
   // <ProtectedRoute> guarantees user/profile are present before this mounts.
   const { user, profile, isLoadingAuth, logout, updateProfile } = useAuth();
   const navigate = useNavigate();
+
+  usePageMeta({
+    title: "Profile",
+    description: "Manage your VibedGallery account, submissions, and password.",
+    path: "/profile",
+    noindex: true,
+  });
 
   const [activeTab, setActiveTab] = useState("account");
   const [submissions, setSubmissions] = useState([]);
@@ -778,10 +787,7 @@ export default function Profile() {
         )}
       </main>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

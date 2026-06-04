@@ -2,13 +2,90 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>vibedgallery</title>
+
+    <!-- Default title + description. usePageMeta overrides these per route. -->
+    <title>VibedGallery — A gallery of apps built with AI</title>
+    <meta
+      name="description"
+      content="VibedGallery is a curated gallery of real apps built with AI coding tools. Browse, try, and submit apps made by independent builders."
+    />
+    <link rel="canonical" href="https://vibedgallery.com/" />
+
+    <!-- Robots -->
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="googlebot" content="index,follow" />
+
+    <!-- Theme + favicon -->
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content="VibedGallery" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="VibedGallery — A gallery of apps built with AI" />
+    <meta
+      property="og:description"
+      content="A curated gallery of real apps built with AI coding tools. Browse, try, and submit apps made by independent builders."
+    />
+    <meta property="og:url" content="https://vibedgallery.com/" />
+    <meta property="og:image" content="https://vibedgallery.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VibedGallery — A gallery of apps built with AI" />
+    <meta
+      name="twitter:description"
+      content="A curated gallery of real apps built with AI coding tools. Browse, try, and submit apps made by independent builders."
+    />
+    <meta name="twitter:image" content="https://vibedgallery.com/og-image.png" />
+
+    <!-- Performance hints -->
+    <link rel="preconnect" href="https://hgujctmkbmcfpxjhqkzo.supabase.co" />
+    <link rel="dns-prefetch" href="https://hgujctmkbmcfpxjhqkzo.supabase.co" />
+
+    <!-- Structured data: WebSite + Organization. Per-page CreativeWork JSON-LD
+         is injected by individual pages (see AppDetail.jsx). -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://vibedgallery.com/#website",
+            "url": "https://vibedgallery.com/",
+            "name": "VibedGallery",
+            "description": "A gallery of real apps built with AI coding tools.",
+            "publisher": { "@id": "https://vibedgallery.com/#organization" },
+            "potentialAction": {
+              "@type": "SearchAction",
+              "target": "https://vibedgallery.com/gallery?q={search_term_string}",
+              "query-input": "required name=search_term_string"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://vibedgallery.com/#organization",
+            "name": "VibedGallery",
+            "url": "https://vibedgallery.com/",
+            "logo": "https://vibedgallery.com/favicon.svg"
+          }
+        ]
+      }
+    </script>
+
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      VibedGallery is a gallery of apps built with AI. This site requires JavaScript to run.
+      Visit <a href="https://vibedgallery.com/">vibedgallery.com</a> in a browser with JavaScript enabled.
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

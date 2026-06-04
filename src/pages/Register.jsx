@@ -6,8 +6,15 @@ import Turnstile from "@/components/Turnstile";
 import { verifyTurnstile } from "@/lib/edgeFunctions";
 import GoogleIcon from "@/components/GoogleIcon";
 import GithubIcon from "@/components/GithubIcon";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 export default function Register() {
+  usePageMeta({
+    title: "Create Account",
+    description: "Create a VibedGallery account in under a minute — free, no credit card.",
+    path: "/register",
+  });
+
   const { register, verifyOtp, resendOtp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
 

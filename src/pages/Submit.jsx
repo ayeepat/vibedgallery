@@ -10,6 +10,7 @@ import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
 import Turnstile from "@/components/Turnstile";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 const CATEGORIES = [
   "Productivity", "Creative", "Developer Tool", "Game",
@@ -210,6 +211,13 @@ export default function Submit() {
   // <ProtectedRoute> guarantees the user is signed in before this mounts.
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  usePageMeta({
+    title: "Submit Your App",
+    description: "Submit an app you built with AI coding tools to the VibedGallery gallery.",
+    path: "/submit",
+    noindex: true,
+  });
 
   const defaultForm = {
     title: "", tagline: "", description: "", url: "",

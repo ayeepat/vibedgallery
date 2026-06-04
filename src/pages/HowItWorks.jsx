@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
+import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 const lineVariants = {
   hidden: { opacity: 0, y: 24 },
@@ -44,6 +46,12 @@ const STEPS = [
 ];
 
 export default function HowItWorks() {
+  usePageMeta({
+    title: "How It Works",
+    description:
+      "How to discover, submit, and verify apps on VibedGallery — a curated gallery of real apps built with AI coding tools.",
+    path: "/how-it-works",
+  });
 
   return (
     <div className="min-h-screen bg-white">
@@ -140,10 +148,7 @@ export default function HowItWorks() {
         </div>
       </section>
 
-      <footer className="px-8 py-6 flex items-center justify-between border-t border-[#E5E5E5]">
-        <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
-        <span className="text-xs text-[#717171]">A museum of the digital avant-garde.</span>
-      </footer>
+      <Footer />
     </div>
   );
 }
