@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Loader2 } from "lucide-react";
+import Turnstile from "@/components/Turnstile";
+import { verifyTurnstile } from "@/lib/edgeFunctions";
 
 export default function Register() {
   const { register, verifyOtp, resendOtp } = useAuth();
@@ -19,6 +21,8 @@ export default function Register() {
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [hasResent, setHasResent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef(null);
 
   // ─── Cooldown timer effect ────────────────────────────────
   useEffect(() => {
@@ -43,9 +47,22 @@ export default function Register() {
       setError("Password must be at least 8 characters.");
       return;
     }
+    if (!captchaToken) {
+      setError("Please complete the captcha.");
+      return;
+    }
 
     setLoading(true);
     try {
+      const captcha = await verifyTurnstile(captchaToken, "register");
+      if (!captcha.success) {
+        setError("Captcha verification failed. Try again.");
+        captchaRef.current?.reset();
+        setCaptchaToken("");
+        setLoading(false);
+        return;
+      }
+
       await register(email, password);
       setStep("verify");
       setMessage("Check your email for a 6-digit verification code.");
@@ -72,6 +89,9 @@ export default function Register() {
       } else {
         setError(msg || "Something went wrong. Try again.");
       }
+      // The captcha token is single-use; reset so the user can retry.
+      captchaRef.current?.reset();
+      setCaptchaToken("");
     } finally {
       setLoading(false);
     }
@@ -382,10 +402,21 @@ export default function Register() {
               />
             </div>
 
+            {/* Captcha */}
+            <div className="px-4 py-4 border-t border-[#E5E5E5] flex items-center justify-center">
+              <Turnstile
+                action="register"
+                innerRef={captchaRef}
+                onVerify={(t) => setCaptchaToken(t)}
+                onExpire={() => setCaptchaToken("")}
+                onError={() => setCaptchaToken("")}
+              />
+            </div>
+
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !captchaToken}
               className="h-14 flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="text-[10px] font-bold uppercase tracking-widest">

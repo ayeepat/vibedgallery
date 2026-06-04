@@ -1,7 +1,25 @@
 import { Link } from "react-router-dom";
 import Nav from "../components/Nav";
 import { useState } from "react";
-import UploadModal from "../components/UploadModal";
+import { motion } from "framer-motion";
+
+const lineVariants = {
+  hidden: { opacity: 0, y: 24 },
+  visible: (i) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: 0.05 + i * 0.08, duration: 0.5, ease: [0.22, 1, 0.36, 1] },
+  }),
+};
+
+const stepVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: (i) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: 0.1 + i * 0.08, duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+  }),
+};
 
 const STEPS = [
   {
@@ -27,27 +45,49 @@ const STEPS = [
 ];
 
 export default function HowItWorks() {
-  const [uploadOpen, setUploadOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-white">
-      <Nav onUploadClick={() => setUploadOpen(true)} hideSearch />
+      <Nav hideSearch />
 
       {/* Hero */}
       <section className="pt-14 border-b border-[#E5E5E5]">
-        <div className="max-w-4xl mx-auto px-8 py-20">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-4">
+        <div className="max-w-4xl mx-auto px-8 py-20 overflow-hidden">
+          <motion.p
+            initial="hidden"
+            animate="visible"
+            custom={0}
+            variants={lineVariants}
+            className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-4"
+          >
             How It Works
-          </p>
+          </motion.p>
           <h1
             className="text-[clamp(2.5rem,6vw,6rem)] font-black uppercase leading-[0.9] text-black"
             style={{ letterSpacing: "-0.04em" }}
           >
-            CREATE.<br />SHARE.<br />DISCOVER.
+            {["CREATE.", "SHARE.", "DISCOVER."].map((line, i) => (
+              <motion.span
+                key={line}
+                custom={i + 1}
+                variants={lineVariants}
+                initial="hidden"
+                animate="visible"
+                className="block"
+              >
+                {line}
+              </motion.span>
+            ))}
           </h1>
-          <p className="mt-8 text-sm text-[#717171] max-w-sm leading-relaxed">
+          <motion.p
+            initial="hidden"
+            animate="visible"
+            custom={4}
+            variants={lineVariants}
+            className="mt-8 text-sm text-[#717171] max-w-sm leading-relaxed"
+          >
             VibedGallery is a living archive of software built with intent. Submit your apps, explore the community's work, and celebrate the new wave of vibe-coded creation.
-          </p>
+          </motion.p>
         </div>
       </section>
 
@@ -55,8 +95,13 @@ export default function HowItWorks() {
       <section className="max-w-4xl mx-auto px-8 py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 border border-[#E5E5E5]">
           {STEPS.map((step, i) => (
-            <div
+            <motion.div
               key={step.number}
+              custom={i}
+              variants={stepVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, amount: 0.3 }}
               className={`p-10 ${i % 2 === 0 ? "border-r border-[#E5E5E5]" : ""} ${i < 2 ? "border-b border-[#E5E5E5]" : ""}`}
             >
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
@@ -71,7 +116,7 @@ export default function HowItWorks() {
               <p className="mt-4 text-sm text-[#717171] leading-relaxed">
                 {step.body}
               </p>
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
@@ -86,13 +131,13 @@ export default function HowItWorks() {
             <span className="text-xs font-bold uppercase tracking-widest">Browse the Gallery</span>
             <span className="text-xs text-[#888]">→</span>
           </Link>
-          <button
-            onClick={() => setUploadOpen(true)}
+          <Link
+            to="/submit"
             className="h-14 flex-1 flex items-center justify-between px-6 bg-white text-black border border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors"
           >
             <span className="text-xs font-bold uppercase tracking-widest">Submit Your App</span>
             <span className="text-xs text-[#717171]">→</span>
-          </button>
+          </Link>
         </div>
       </section>
 
@@ -100,8 +145,6 @@ export default function HowItWorks() {
         <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
         <span className="text-xs text-[#717171]">A museum of the digital avant-garde.</span>
       </footer>
-
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </div>
   );
 }

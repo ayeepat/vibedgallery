@@ -1,27 +1,50 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import Nav from "../components/Nav";
-import { APPS } from "../data/apps";
+import { useApp, useMaker } from "@/lib/useApps";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import UploadModal from "../components/UploadModal";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 
 export default function AppDetail() {
   const { id } = useParams();
-  const app = APPS.find((a) => a.id === Number(id));
-  const [uploadOpen, setUploadOpen] = useState(false);
+  const { data: app, isLoading, error } = useApp(id);
+  const { data: maker } = useMaker(app?.user_id);
 
-  if (!app) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">App not found.</p>
+      <div className="min-h-screen bg-white">
+        <Nav />
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="w-6 h-6 animate-spin text-[#AAAAAA]" />
+        </div>
       </div>
     );
   }
 
+  if (error || !app) {
+    return (
+      <div className="min-h-screen bg-white">
+        <Nav />
+        <div className="flex flex-col items-center justify-center h-96 gap-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">App not found.</p>
+          <Link
+            to="/gallery"
+            className="text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black underline underline-offset-4"
+          >
+            ← Back to Gallery
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const makerName = maker?.name || "Anonymous Maker";
+
   return (
     <div className="min-h-screen bg-white">
-      <Nav onUploadClick={() => setUploadOpen(true)} />
+      <Nav />
 
       <div className="pt-14 max-w-4xl mx-auto px-6 py-12">
         {/* Back */}
@@ -33,18 +56,26 @@ export default function AppDetail() {
         </Link>
 
         {/* Thumbnail */}
-        <div className="mt-6 w-full aspect-video overflow-hidden bg-[#F0F0F0] border border-[#E5E5E5]">
+        <div className="mt-6 relative w-full aspect-video overflow-hidden bg-[#F0F0F0] border border-[#E5E5E5]">
           <img
             src={app.image}
             alt={app.name}
             className="w-full h-full object-cover"
           />
+          {app.ownership_verified && (
+            <span
+              title="Ownership verified by maker"
+              className="absolute top-3 left-3 text-[10px] font-bold uppercase tracking-widest bg-white border border-[#E5E5E5] text-black px-3 py-1.5"
+            >
+              ✓ Verified
+            </span>
+          )}
         </div>
 
         {/* Header */}
         <div className="mt-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 border-b border-[#E5E5E5] pb-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171] border border-[#E5E5E5] px-2 py-0.5">
                 {app.category}
               </span>
@@ -53,7 +84,7 @@ export default function AppDetail() {
               </span>
             </div>
             <h1
-              className="text-3xl sm:text-5xl font-black uppercase text-black leading-none"
+              className="text-3xl sm:text-5xl font-black uppercase text-black leading-none break-words"
               style={{ letterSpacing: "-0.04em" }}
             >
               {app.name}
@@ -61,11 +92,21 @@ export default function AppDetail() {
             <p className="mt-3 text-sm text-[#717171] max-w-lg leading-relaxed">
               {app.tagline}
             </p>
+            {/* Maker line */}
+            <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              By{" "}
+              <Link
+                to={`/maker/${app.user_id}`}
+                className="text-black hover:underline underline-offset-4"
+              >
+                {makerName}
+              </Link>
+            </p>
           </div>
 
           <div className="flex flex-col gap-2 shrink-0">
             {/* Upvote */}
-            <UpvoteButton appId={app.id} initialUpvotes={app.upvotes} />
+            <UpvoteButton appId={app.id} initialCount={app.upvotes} />
             {/* Visit */}
             <a
               href={app.url}
@@ -89,7 +130,7 @@ export default function AppDetail() {
           {[
             { label: "Category", value: app.category },
             { label: "Built With", value: app.tool },
-            { label: "Upvotes", value: <UpvoteCount appId={app.id} initialCount={app.upvotes} /> },
+            { label: "Upvotes", value: app.upvotes },
           ].map((item, i) => (
             <div
               key={item.label}
@@ -106,42 +147,24 @@ export default function AppDetail() {
         <span className="text-xs font-black uppercase tracking-widest text-black">VibedGallery</span>
         <span className="text-xs text-[#717171]">Apps built with AI, shared by their makers.</span>
       </footer>
-
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </div>
   );
 }
 
-function UpvoteCount({ appId, initialCount }) {
-  const [count, setCount] = useState(initialCount);
+function UpvoteButton({ appId, initialCount }) {
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchUpvotes = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('upvotes')
-          .select('id')
-          .eq('app_id', appId);
-        
-        if (!error && data) {
-          setCount(data.length);
-        }
-      } catch (err) {
-        console.error('Error fetching upvotes:', err);
-      }
-    };
-
-    fetchUpvotes();
-  }, [appId]);
-
-  return <>{count}</>;
-}
-
-function UpvoteButton({ appId, initialUpvotes }) {
-  const { user } = useAuth();
   const [upvoted, setUpvoted] = useState(false);
-  const [count, setCount] = useState(initialUpvotes);
+  const [count, setCount] = useState(initialCount);
   const [loading, setLoading] = useState(false);
+
+  // Keep the displayed count in sync with the latest app data from the cache
+  // (e.g. another tab toggled the upvote).
+  useEffect(() => {
+    setCount(initialCount);
+  }, [initialCount]);
 
   useEffect(() => {
     if (!user) {
@@ -149,52 +172,59 @@ function UpvoteButton({ appId, initialUpvotes }) {
       return;
     }
 
-    const checkUpvoted = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('upvotes')
-          .select('id')
-          .eq('app_id', appId)
-          .eq('user_id', user.id)
-          .single();
-        
-        setUpvoted(!error && !!data);
-      } catch (err) {
-        setUpvoted(false);
-      }
-    };
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("upvotes")
+        .select("id")
+        .eq("app_id", appId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      setUpvoted(!error && !!data);
+    })();
 
-    checkUpvoted();
+    return () => {
+      cancelled = true;
+    };
   }, [appId, user]);
 
   const handleUpvote = async () => {
-    if (!user) {
-      alert('Please log in to upvote.');
+    if (!isAuthenticated) {
+      navigate("/login");
       return;
     }
+    if (loading) return;
 
+    // Optimistic update — flip immediately, roll back if the server rejects.
+    const wasUpvoted = upvoted;
+    setUpvoted(!wasUpvoted);
+    setCount((c) => (wasUpvoted ? Math.max(c - 1, 0) : c + 1));
     setLoading(true);
+
     try {
-      if (upvoted) {
-        await supabase
-          .from('upvotes')
+      if (wasUpvoted) {
+        const { error } = await supabase
+          .from("upvotes")
           .delete()
-          .eq('app_id', appId)
-          .eq('user_id', user.id);
-        
-        setCount(c => c - 1);
-        setUpvoted(false);
+          .eq("app_id", appId)
+          .eq("user_id", user.id);
+        if (error) throw error;
       } else {
-        await supabase
-          .from('upvotes')
+        const { error } = await supabase
+          .from("upvotes")
           .insert({ app_id: appId, user_id: user.id });
-        
-        setCount(c => c + 1);
-        setUpvoted(true);
+        if (error) throw error;
       }
+
+      // Refresh the app + gallery queries so Trending re-sorts.
+      queryClient.invalidateQueries({ queryKey: ["app", appId] });
+      queryClient.invalidateQueries({ queryKey: ["apps", "approved"] });
     } catch (err) {
-      console.error('Error updating upvote:', err);
-      alert('Failed to update upvote. Please try again.');
+      // Roll back the optimistic update.
+      setUpvoted(wasUpvoted);
+      setCount((c) => (wasUpvoted ? c + 1 : Math.max(c - 1, 0)));
+      console.error("Upvote failed:", err);
     } finally {
       setLoading(false);
     }

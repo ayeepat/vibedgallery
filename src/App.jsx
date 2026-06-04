@@ -1,11 +1,13 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import ScrollToTop from './components/ScrollToTop';
+import PageTransition from './components/PageTransition';
 
 // Pages
 import Login from './pages/Login';
@@ -19,6 +21,39 @@ import HowItWorks from './pages/HowItWorks';
 import Submit from './pages/Submit';
 import Admin from './pages/Admin';
 import Profile from './pages/Profile';
+import Maker from './pages/Maker';
+
+const wrap = (el) => <PageTransition>{el}</PageTransition>;
+
+function AnimatedRoutes() {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <Routes location={location} key={location.pathname}>
+        {/* Public */}
+        <Route path="/"                element={wrap(<Home />)} />
+        <Route path="/gallery"         element={wrap(<Gallery />)} />
+        <Route path="/app/:id"         element={wrap(<AppDetail />)} />
+        <Route path="/maker/:userId"   element={wrap(<Maker />)} />
+        <Route path="/how-it-works"    element={wrap(<HowItWorks />)} />
+
+        {/* Auth */}
+        <Route path="/login"           element={wrap(<Login />)} />
+        <Route path="/register"        element={wrap(<Register />)} />
+        <Route path="/forgot-password" element={wrap(<ForgotPassword />)} />
+        <Route path="/reset-password"  element={wrap(<ResetPassword />)} />
+
+        {/* Submission + Admin */}
+        <Route path="/submit"          element={wrap(<Submit />)} />
+        <Route path="/admin"           element={wrap(<Admin />)} />
+        <Route path="/profile"         element={wrap(<Profile />)} />
+
+        {/* 404 */}
+        <Route path="*"                element={wrap(<PageNotFound />)} />
+      </Routes>
+    </AnimatePresence>
+  );
+}
 
 function App() {
   return (
@@ -27,27 +62,7 @@ function App() {
         <AuthProvider>
           <QueryClientProvider client={queryClientInstance}>
             <ScrollToTop />
-            <Routes>
-              {/* Public */}
-              <Route path="/"                element={<Home />} />
-              <Route path="/gallery"         element={<Gallery />} />
-              <Route path="/app/:id"         element={<AppDetail />} />
-              <Route path="/how-it-works"    element={<HowItWorks />} />
-
-              {/* Auth */}
-              <Route path="/login"           element={<Login />} />
-              <Route path="/register"        element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password"  element={<ResetPassword />} />
-
-              {/* Submission + Admin */}
-              <Route path="/submit"          element={<Submit />} />
-              <Route path="/admin"           element={<Admin />} />
-              <Route path="/profile"         element={<Profile />} />
-
-              {/* 404 */}
-              <Route path="*"               element={<PageNotFound />} />
-            </Routes>
+            <AnimatedRoutes />
             <Toaster />
           </QueryClientProvider>
         </AuthProvider>

@@ -166,10 +166,8 @@ export const AuthProvider = ({ children }) => {
       profile,
       isAuthenticated,
       isLoadingAuth,
-      isLoadingPublicSettings: false,
       authError,
       authChecked,
-      appPublicSettings: null,
 
       login,
       logout,

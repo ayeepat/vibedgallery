@@ -1,0 +1,115 @@
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabaseClient'
+
+// Explicit column list for SELECTs on public.apps.
+// `submitter_email` is intentionally OMITTED — that column is locked down at
+// the DB layer (anon and authenticated have no SELECT privilege on it). If we
+// used `select('*')`, PostgREST would generate a query referencing every
+// column and PostgreSQL would reject the request with "permission denied".
+// Admins fetch the email separately via the get_app_submitter_email RPC.
+export const APP_SELECT_COLUMNS =
+  'id, user_id, title, tagline, description, url, category, tags, ' +
+  'primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, ' +
+  'verification_token, ownership_verified, ' +
+  'safe_browsing_passed, safe_browsing_threats, thumbnail_flagged, ' +
+  'status, rejection_reason, reviewed_by, reviewed_at, ' +
+  'submitter_twitter, submitter_github, ' +
+  'upvotes, views, created_at, updated_at'
+
+// Normalize a Supabase apps row to the shape the UI was built for.
+function normalizeApp(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.title,
+    tagline: row.tagline,
+    description: row.description,
+    category: row.category,
+    tool: row.primary_tool,
+    other_tools: row.other_tools,
+    tags: row.tags || [],
+    upvotes: row.upvotes ?? 0,
+    url: row.url,
+    image: row.thumbnail_url,
+    screenshots: row.screenshot_urls || [],
+    demo_video_url: row.demo_video_url,
+    submitter_twitter: row.submitter_twitter,
+    submitter_github: row.submitter_github,
+    ownership_verified: row.ownership_verified === true,
+    created_at: row.created_at,
+    status: row.status,
+  }
+}
+
+// All approved apps, newest first.
+export function useApprovedApps() {
+  return useQuery({
+    queryKey: ['apps', 'approved'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('apps')
+        .select(APP_SELECT_COLUMNS)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data || []).map(normalizeApp)
+    },
+    staleTime: 30_000,
+  })
+}
+
+// Single approved app by id (uuid string).
+export function useApp(id) {
+  return useQuery({
+    queryKey: ['app', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('apps')
+        .select(APP_SELECT_COLUMNS)
+        .eq('id', id)
+        .single()
+      if (error) throw error
+      return normalizeApp(data)
+    },
+    enabled: !!id,
+  })
+}
+
+// All approved apps for a given maker (user_id), newest first.
+export function useApprovedAppsByMaker(userId) {
+  return useQuery({
+    queryKey: ['apps', 'maker', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('apps')
+        .select(APP_SELECT_COLUMNS)
+        .eq('status', 'approved')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data || []).map(normalizeApp)
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+}
+
+// Public profile lookup. Reads from the public_profiles view so anonymous
+// visitors can resolve maker info without seeing private fields like email.
+export function useMaker(userId) {
+  return useQuery({
+    queryKey: ['maker', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('public_profiles')
+        .select('id, name, avatar_url, created_at')
+        .eq('id', userId)
+        .maybeSingle()
+      if (error) throw error
+      return data
+    },
+    enabled: !!userId,
+    staleTime: 60_000,
+  })
+}

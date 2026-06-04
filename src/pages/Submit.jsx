@@ -4,9 +4,12 @@ import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
 import { checkImageSafety, uploadImage } from "@/lib/imageCheck";
-import { sendEmail } from "@/lib/edgeFunctions";
+import { sendEmail, verifyTurnstile } from "@/lib/edgeFunctions";
+import { checkUrlSafety } from "@/lib/safeBrowsing";
+import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
+import Turnstile from "@/components/Turnstile";
 
 const CATEGORIES = [
   "Productivity", "Creative", "Developer Tool", "Game",
@@ -30,50 +33,6 @@ function normalizeUrl(input) {
     url = "https://" + url;
   }
   return url;
-}
-
-// ─── Safe Browsing (inline, no import) ────────────────────────
-async function checkUrlSafety(url) {
-  const API_KEY = import.meta.env.VITE_GOOGLE_SAFE_BROWSING_KEY;
-  if (!API_KEY) {
-    console.warn("No Safe Browsing API key — skipping check");
-    return { safe: true, threats: [] };
-  }
-  try {
-    const response = await fetch(
-      `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client: { clientId: "vibedgallery", clientVersion: "1.0.0" },
-          threatInfo: {
-            threatTypes: [
-              "MALWARE",
-              "SOCIAL_ENGINEERING",
-              "UNWANTED_SOFTWARE",
-              "POTENTIALLY_HARMFUL_APPLICATION",
-            ],
-            platformTypes: ["ANY_PLATFORM"],
-            threatEntryTypes: ["URL"],
-            threatEntries: [{ url }],
-          },
-        }),
-      }
-    );
-    if (!response.ok) {
-      console.warn("Safe Browsing API error:", response.status);
-      return { safe: true, threats: [] };
-    }
-    const data = await response.json();
-    if (data.matches && data.matches.length > 0) {
-      return { safe: false, threats: data.matches.map((m) => m.threatType) };
-    }
-    return { safe: true, threats: [] };
-  } catch (err) {
-    console.warn("Safe Browsing check failed, skipping:", err.message);
-    return { safe: true, threats: [] };
-  }
 }
 
 // ─── Draft helpers ─────────────────────────────────────────────
@@ -272,6 +231,8 @@ export default function Submit() {
   const [submittedAppId, setSubmittedAppId] = useState(null);
   const [fileDownloaded, setFileDownloaded] = useState(false);
   const [draftRestored, setDraftRestored] = useState(!!loadDraft());
+  const [captchaToken, setCaptchaToken] = useState("");
+  const captchaRef = useRef(null);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -319,6 +280,12 @@ export default function Submit() {
     setScreenshots((s) => [...s, { file, preview: URL.createObjectURL(file) }]);
   };
 
+  const parseTags = (raw) =>
+    (raw || "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
   const validate = () => {
     const e = {};
     if (!form.title.trim()) e.title = "Required";
@@ -331,6 +298,7 @@ export default function Submit() {
     if (!form.primaryTool) e.primaryTool = "Required";
     if (!thumbnail) e.thumbnail = "Thumbnail is required";
     if (!form.ownershipConfirmed) e.ownership = "You must confirm you built this app";
+    if (parseTags(form.tags).length > 5) e.tags = "Max 5 tags";
     return e;
   };
 
@@ -347,9 +315,24 @@ export default function Submit() {
       return;
     }
 
+    if (!captchaToken) {
+      setGlobalError("Please complete the captcha at the bottom of the form.");
+      return;
+    }
+
     setLoading(true);
 
     try {
+      // Captcha — verified server-side; secret never reaches the browser.
+      const captcha = await verifyTurnstile(captchaToken, "submit");
+      if (!captcha.success) {
+        setGlobalError("Captcha verification failed. Try the captcha again.");
+        captchaRef.current?.reset();
+        setCaptchaToken("");
+        setLoading(false);
+        return;
+      }
+
       const appUrl = normalizeUrl(form.url);
 
       // Safe browsing check
@@ -357,6 +340,8 @@ export default function Submit() {
 
       if (safety.error) {
         setGlobalError(safety.error);
+        captchaRef.current?.reset();
+        setCaptchaToken("");
         setLoading(false);
         return;
       }
@@ -365,6 +350,8 @@ export default function Submit() {
         setGlobalError(
           `This URL was flagged as unsafe: ${safety.threats.join(", ")}. We cannot accept this submission.`
         );
+        captchaRef.current?.reset();
+        setCaptchaToken("");
         setLoading(false);
         return;
       }
@@ -384,7 +371,7 @@ export default function Submit() {
       setUploadProgress("inserting_database");
 
       const token = generateVerificationToken();
-      const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 5);
+      const tags = parseTags(form.tags).slice(0, 5);
       const demoUrl = form.demoVideoUrl ? normalizeUrl(form.demoVideoUrl) : null;
       const githubUrl = form.githubRepo ? normalizeUrl(form.githubRepo) : null;
 
@@ -392,7 +379,8 @@ export default function Submit() {
         .from("apps")
         .insert({
           user_id: user.id,
-          submitter_email: user.email,
+          // submitter_email is set server-side by the apps_set_submitter_email
+          // trigger from auth.users; the column is also revoked from clients.
           submitter_twitter: form.twitterHandle || null,
           submitter_github: githubUrl,
           title: form.title.trim(),
@@ -411,7 +399,7 @@ export default function Submit() {
           safe_browsing_threats: safety.threats,
           status: "pending_verification",
         })
-        .select()
+        .select(APP_SELECT_COLUMNS)
         .single();
 
       if (error) {
@@ -421,12 +409,14 @@ export default function Submit() {
 
       // Fire-and-forget emails: confirmation to submitter + alert to admin.
       // Failures are logged inside sendEmail and never block submission.
+      // submitter_email isn't returned in `data` anymore (column hidden from
+      // the API), but the edge function can look it up from auth.users itself.
       const emailApp = {
         id: data.id,
         title: data.title,
         tagline: data.tagline,
         url: data.url,
-        submitter_email: data.submitter_email,
+        submitter_email: user.email,
         category: data.category,
         primary_tool: data.primary_tool,
       };
@@ -441,7 +431,15 @@ export default function Submit() {
 
     } catch (err) {
       console.error("Submission failed:", err);
-      setGlobalError(err.message || "Something went wrong. Please try again.");
+      const raw = err?.message || "";
+      // Map the server-side rate-limit exception to a clean user-facing line.
+      if (/rate limit/i.test(raw)) {
+        setGlobalError(raw.replace(/^.*rate limit:\s*/i, ""));
+      } else {
+        setGlobalError(raw || "Something went wrong. Please try again.");
+      }
+      captchaRef.current?.reset();
+      setCaptchaToken("");
     } finally {
       setLoading(false);
     }
@@ -566,6 +564,64 @@ export default function Submit() {
                   <p className="text-[9px] text-[#AAAAAA]">
                     After deploying, file must be accessible at:{" "}
                     <span className="font-mono text-black">{cleanUrl}/{verificationToken}.html</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 3 — host-specific gotchas */}
+            <div className="border border-[#E5E5E5] mb-4">
+              <div className="px-6 py-4 border-b border-[#E5E5E5] bg-[#F5F5F5] flex items-center gap-3">
+                <span className="w-6 h-6 bg-black text-white flex items-center justify-center text-[10px] font-bold shrink-0">3</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-black">
+                  Host gotchas — check yours
+                </span>
+              </div>
+              <div className="divide-y divide-[#E5E5E5]">
+                {[
+                  {
+                    host: "Vercel",
+                    body: "Disable Deployment Protection (Settings → Deployment Protection → Vercel Authentication = Disabled or Only Preview). A catch-all SPA rewrite is fine — static files in /public win over rewrites.",
+                  },
+                  {
+                    host: "Netlify",
+                    body: "If you have a catch-all rule in netlify.toml or _redirects (e.g. /* → /index.html 200), it will swallow the file. Add an explicit rule above it: /" + verificationToken + ".html /" + verificationToken + ".html 200",
+                  },
+                  {
+                    host: "Cloudflare Pages",
+                    body: "If using _redirects with a SPA fallback, add an explicit allow line for /" + verificationToken + ".html before the wildcard. Check Access policies aren't gating the path.",
+                  },
+                  {
+                    host: "GitHub Pages",
+                    body: "Drop the file at the repo root (or /docs depending on your config). No rewrite issues — should just work.",
+                  },
+                  {
+                    host: "Custom server / Nginx / Apache",
+                    body: "Make sure your SPA fallback (try_files) checks for the file on disk before falling back to index.html. Default Vite/CRA setups do this correctly.",
+                  },
+                ].map(({ host, body }) => (
+                  <div key={host} className="px-6 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-black">
+                      {host}
+                    </p>
+                    <p className="text-[11px] text-[#717171] mt-1 leading-relaxed">{body}</p>
+                  </div>
+                ))}
+                <div className="px-6 py-3 bg-[#FAFAFA]">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black">
+                    Quick self-test
+                  </p>
+                  <p className="text-[11px] text-[#717171] mt-1 leading-relaxed">
+                    Open{" "}
+                    <a
+                      href={`${cleanUrl}/${verificationToken}.html`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-black underline break-all"
+                    >
+                      {cleanUrl}/{verificationToken}.html
+                    </a>{" "}
+                    in an incognito window. If it returns your homepage or 404, the file isn't being served and verification will fail.
                   </p>
                 </div>
               </div>
@@ -730,11 +786,17 @@ export default function Submit() {
                 </Field>
                 <FieldError msg={errors.category} />
 
-                <Field label="Tags (comma separated, max 5)">
+                <Field label={`Tags (comma separated, ${parseTags(form.tags).length}/5)`}>
                   <input type="text" value={form.tags} onChange={(e) => set("tags", e.target.value)}
                     placeholder="ai, productivity, open-source"
                     className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none" />
                 </Field>
+                <FieldError msg={
+                  errors.tags ||
+                  (parseTags(form.tags).length > 5
+                    ? `${parseTags(form.tags).length} tags — only the first 5 will be saved`
+                    : null)
+                } />
               </div>
 
               <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
@@ -872,7 +934,17 @@ export default function Submit() {
                 </div>
               </div>
             )}
-            <button type="submit" disabled={loading}
+            {/* Captcha — server-verified before the row is created */}
+            <div className="px-8 py-5 border-t border-[#E5E5E5] flex items-center justify-center">
+              <Turnstile
+                action="submit"
+                innerRef={captchaRef}
+                onVerify={(t) => setCaptchaToken(t)}
+                onExpire={() => setCaptchaToken("")}
+                onError={() => setCaptchaToken("")}
+              />
+            </div>
+            <button type="submit" disabled={loading || !captchaToken}
               className="w-full h-16 flex items-center justify-between px-8 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <span className="text-[10px] font-bold uppercase tracking-widest">
                 {loading ? "Submitting..." : "Submit App for Review"}

@@ -8,7 +8,7 @@ export const ErrorHandler = {
    * Log error to console (development only)
    */
   log: (context, error) => {
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.error(`[${context}]`, error);
     }
   },

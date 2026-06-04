@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
+import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import Nav from "@/components/Nav";
-import { Loader2, Check, X, ExternalLink, Search } from "lucide-react";
+import { Loader2, Check, X, ExternalLink, Search, ShieldCheck } from "lucide-react";
 
 const STATUS_COLORS = {
   pending_verification: "#717171",
@@ -34,6 +35,77 @@ export default function Admin() {
   const [rejectionReason, setRejectionReason] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
   const [verifyResult, setVerifyResult] = useState(null)
+  const [recheckLoading, setRecheckLoading] = useState(false)
+  // submitter_email is no longer SELECT-able from the client; fetch on demand
+  // via a SECURITY DEFINER RPC for the selected row only.
+  const [selectedEmail, setSelectedEmail] = useState(null)
+  const [emailLoading, setEmailLoading] = useState(false)
+
+  useEffect(() => {
+    if (!selected?.id) {
+      setSelectedEmail(null)
+      return
+    }
+    let cancelled = false
+    setEmailLoading(true)
+    setSelectedEmail(null)
+    supabase
+      .rpc("get_app_submitter_email", { target_app_id: selected.id })
+      .then(({ data, error }) => {
+        if (cancelled) return
+        if (error) {
+          console.error("Failed to fetch submitter email:", error)
+          setSelectedEmail(null)
+        } else {
+          setSelectedEmail(data ?? null)
+        }
+        setEmailLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selected?.id])
+
+  const handleRecheck = async (app) => {
+    if (!app?.verification_token || !app?.url) {
+      setVerifyResult({
+        verified: false,
+        reason: "Missing verification_token or url",
+        checked: [],
+      })
+      return
+    }
+    setRecheckLoading(true)
+    setVerifyResult(null)
+    try {
+      const result = await verifyHtml(app.url, app.verification_token)
+      setVerifyResult(result)
+
+      // Persist ownership_verified if newly confirmed so we don't re-check on approve.
+      if (result.verified && !app.ownership_verified) {
+        const { error } = await supabase
+          .from("apps")
+          .update({ ownership_verified: true })
+          .eq("id", app.id)
+        if (!error) {
+          setApps((prev) =>
+            prev.map((a) =>
+              a.id === app.id ? { ...a, ownership_verified: true } : a
+            )
+          )
+          setSelected((s) => (s ? { ...s, ownership_verified: true } : s))
+        }
+      }
+    } catch (err) {
+      setVerifyResult({
+        verified: false,
+        reason: err?.message || "Check failed",
+        checked: [],
+      })
+    } finally {
+      setRecheckLoading(false)
+    }
+  }
 
   // Check admin status
   useEffect(() => {
@@ -70,12 +142,14 @@ export default function Admin() {
     setLoading(true)
     const term = search.trim()
 
-    let query = supabase.from("apps").select("*")
+    let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
 
     // Admin search queries ALL statuses; otherwise scope to the active tab.
+    // (submitter_email is no longer SELECT-able from the API, so we can't
+    // search it here. To search by email, fall back to clicking into a row.)
     if (term) {
       query = query.or(
-        `title.ilike.%${term}%,tagline.ilike.%${term}%,submitter_email.ilike.%${term}%`
+        `title.ilike.%${term}%,tagline.ilike.%${term}%,primary_tool.ilike.%${term}%,category.ilike.%${term}%`
       )
     } else {
       query = query.eq("status", filter)
@@ -120,11 +194,13 @@ export default function Admin() {
       if (error) throw error
 
       // Notify the submitter their app is live.
+      // selectedEmail is fetched via SECURITY DEFINER RPC; falls through to
+      // the edge function which can re-derive it from auth.users if needed.
       sendEmail("approved", {
         id: app.id,
         title: app.title,
         url: app.url,
-        submitter_email: app.submitter_email,
+        submitter_email: selectedEmail,
       })
 
       setApps((prev) => prev.filter((a) => a.id !== app.id))
@@ -163,7 +239,7 @@ export default function Admin() {
         {
           id: app.id,
           title: app.title,
-          submitter_email: app.submitter_email,
+          submitter_email: selectedEmail,
         },
         { rejectionReason }
       )
@@ -275,7 +351,7 @@ export default function Admin() {
                         {app.tagline}
                       </p>
                       <p className="text-[9px] text-[#AAAAAA] mt-1">
-                        {app.submitter_email}
+                        {new Date(app.created_at).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
@@ -346,7 +422,7 @@ export default function Admin() {
                     ["Primary Tool", selected.primary_tool],
                     ["Other Tools", selected.other_tools],
                     ["Tags", selected.tags?.join(", ")],
-                    ["Submitted By", selected.submitter_email],
+                    ["Submitted By", emailLoading ? "Loading…" : (selectedEmail ?? "—")],
                     ["Twitter", selected.submitter_twitter],
                     ["GitHub", selected.submitter_github],
                     ["Ownership Verified", selected.ownership_verified ? "Yes (trusted — not re-checked)" : "No"],
@@ -458,10 +534,27 @@ export default function Admin() {
                       />
                     </div>
 
+                    {/* Re-check ownership file */}
+                    {selected.verification_token && selected.url && (
+                      <button
+                        onClick={() => handleRecheck(selected)}
+                        disabled={recheckLoading || actionLoading}
+                        className="w-full h-12 flex items-center justify-center gap-2 bg-white text-black hover:bg-[#F5F5F5] transition-colors border-b border-[#E5E5E5] disabled:opacity-50"
+                      >
+                        {recheckLoading
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <ShieldCheck className="w-3.5 h-3.5" />
+                        }
+                        <span className="text-[10px] font-bold uppercase tracking-widest">
+                          {recheckLoading ? "Checking..." : "Re-run Verification Check"}
+                        </span>
+                      </button>
+                    )}
+
                     <div className="flex">
                       <button
                         onClick={() => handleApprove(selected)}
-                        disabled={actionLoading}
+                        disabled={actionLoading || recheckLoading}
                         className="flex-1 h-14 flex items-center justify-center gap-2 bg-black text-white hover:bg-[#222] transition-colors border-r border-[#333] disabled:opacity-50"
                       >
                         {actionLoading
@@ -474,7 +567,7 @@ export default function Admin() {
                       </button>
                       <button
                         onClick={() => handleReject(selected)}
-                        disabled={actionLoading}
+                        disabled={actionLoading || recheckLoading}
                         className="flex-1 h-14 flex items-center justify-center gap-2 bg-white text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50"
                       >
                         {actionLoading

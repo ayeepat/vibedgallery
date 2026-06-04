@@ -1,9 +1,18 @@
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import SearchBar from "@/components/SearchBar";
 
 export default function Nav({ hideSearch = false }) {
   const { isAuthenticated, user, logout, isAdmin } = useAuth();
+  const { pathname } = useLocation();
+
+  const navLinkClass = (path) => {
+    const isActive =
+      path === "/" ? pathname === "/" : pathname.startsWith(path);
+    return `text-[10px] font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${
+      isActive ? "text-black underline underline-offset-4" : "text-[#717171] hover:text-black"
+    }`;
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-14 bg-white border-b border-[#E5E5E5] flex items-center px-6 gap-4">
@@ -17,17 +26,11 @@ export default function Nav({ hideSearch = false }) {
       </Link>
 
       {/* Nav links */}
-      <Link
-        to="/gallery"
-        className="text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors whitespace-nowrap"
-      >
+      <Link to="/gallery" className={navLinkClass("/gallery")}>
         Gallery
       </Link>
 
-      <Link
-        to="/how-it-works"
-        className="text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors whitespace-nowrap"
-      >
+      <Link to="/how-it-works" className={navLinkClass("/how-it-works")}>
         How It Works
       </Link>
 
@@ -60,7 +63,11 @@ export default function Nav({ hideSearch = false }) {
             {/* Username */}
             <Link
               to="/profile"
-              className="h-8 px-4 flex items-center border-t border-b border-r border-[#E5E5E5] text-[9px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors whitespace-nowrap"
+              className={`h-8 px-4 flex items-center border-t border-b border-r border-[#E5E5E5] text-[9px] font-bold uppercase tracking-widest transition-colors whitespace-nowrap ${
+                pathname.startsWith("/profile")
+                  ? "bg-black text-white"
+                  : "text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
+              }`}
             >
               {user?.email?.split("@")[0]}
             </Link>

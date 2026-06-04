@@ -40,35 +40,47 @@ export default function SearchBar() {
       setLoading(true);
 
       try {
-        const { data, error } = await supabase
+        const term = query.trim();
+        const pattern = `%${term}%`;
+
+        // One round trip across title / tagline / category / primary_tool.
+        const { data: textData, error: textError } = await supabase
           .from("apps")
           .select("id, title, tagline, category, primary_tool, thumbnail_url")
           .eq("status", "approved")
-          .ilike("title", `%${query.trim()}%`)
+          .or(
+            [
+              `title.ilike.${pattern}`,
+              `tagline.ilike.${pattern}`,
+              `category.ilike.${pattern}`,
+              `primary_tool.ilike.${pattern}`,
+            ].join(",")
+          )
           .limit(6);
 
-        if (error) throw error;
+        if (textError) throw textError;
 
-        // Also search by tagline if title search gives <3 results
-        if (data.length < 3) {
-          const { data: taglineResults } = await supabase
+        const merged = textData ?? [];
+
+        // Tags is a text[] column — `ilike` doesn't apply. Use array-contains.
+        if (merged.length < 6) {
+          const { data: tagData } = await supabase
             .from("apps")
             .select("id, title, tagline, category, primary_tool, thumbnail_url")
             .eq("status", "approved")
-            .ilike("tagline", `%${query.trim()}%`)
-            .limit(6 - data.length);
+            .contains("tags", [term.toLowerCase()])
+            .limit(6 - merged.length);
 
-          if (taglineResults) {
-            // Deduplicate
-            const ids = new Set(data.map((d) => d.id));
-            for (const r of taglineResults) {
-              if (!ids.has(r.id)) data.push(r);
+          if (tagData) {
+            const seen = new Set(merged.map((d) => d.id));
+            for (const r of tagData) {
+              if (!seen.has(r.id)) merged.push(r);
             }
           }
         }
 
-        setResults(data || []);
-        setOpen(data.length > 0);
+        setResults(merged);
+        setOpen(merged.length > 0);
         setHighlighted(-1);
       } catch (err) {
         console.error("Search error:", err);
