@@ -104,6 +104,25 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  // Kick off an OAuth sign-in. Supabase redirects the browser to the provider,
+  // then the provider redirects back to `redirectTo`. AuthCallback finishes
+  // the handoff and routes the user to the original destination.
+  const signInWithProvider = async (provider, { redirectPath = '/' } = {}) => {
+    setAuthError(null);
+    const safePath = redirectPath.startsWith('/') && !redirectPath.startsWith('//')
+      ? redirectPath
+      : '/';
+    const redirectTo =
+      `${window.location.origin}/auth/callback` +
+      `?next=${encodeURIComponent(safePath)}`;
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo },
+    });
+    if (error) throw error;
+    return data;
+  };
+
   const logout = async (shouldRedirect = true) => {
     setAuthError(null);
     const { error } = await supabase.auth.signOut();
@@ -172,6 +191,7 @@ export const AuthProvider = ({ children }) => {
       login,
       logout,
       register,
+      signInWithProvider,
       verifyOtp,
       resendOtp,
       forgotPassword,

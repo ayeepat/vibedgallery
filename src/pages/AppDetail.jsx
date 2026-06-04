@@ -191,7 +191,8 @@ function UpvoteButton({ appId, initialCount }) {
 
   const handleUpvote = async () => {
     if (!isAuthenticated) {
-      navigate("/login");
+      const from = `/app/${appId}`;
+      navigate(`/login?from=${encodeURIComponent(from)}`);
       return;
     }
     if (loading) return;

@@ -15,6 +15,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import AuthCallback from './pages/AuthCallback';
 import Home from './pages/Home';
 import Gallery from './pages/Gallery';
 import AppDetail from './pages/AppDetail';
@@ -43,6 +44,7 @@ function AnimatedRoutes() {
         <Route path="/register"        element={wrap(<Register />)} />
         <Route path="/forgot-password" element={wrap(<ForgotPassword />)} />
         <Route path="/reset-password"  element={wrap(<ResetPassword />)} />
+        <Route path="/auth/callback"   element={<AuthCallback />} />
 
         {/* Submission + Admin */}
         <Route path="/submit"          element={wrap(<ProtectedRoute><Submit /></ProtectedRoute>)} />

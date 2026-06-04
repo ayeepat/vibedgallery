@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Loader2 } from "lucide-react";
+import GoogleIcon from "@/components/GoogleIcon";
+import GithubIcon from "@/components/GithubIcon";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, signInWithProvider } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -12,6 +14,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [oauthLoading, setOauthLoading] = useState("");
 
   // Show success message if coming from password reset
   const resetSuccess = searchParams.get("reset") === "success";
@@ -43,6 +46,18 @@ export default function Login() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOAuth = async (provider) => {
+    setError("");
+    setOauthLoading(provider);
+    try {
+      await signInWithProvider(provider, { redirectPath: redirectTarget });
+      // Browser is now navigating to the provider — nothing else to do.
+    } catch (err) {
+      setError(err.message || `Could not start ${provider} sign in.`);
+      setOauthLoading("");
     }
   };
 
@@ -132,6 +147,51 @@ export default function Login() {
             </div>
           )}
 
+          {/* OAuth */}
+          <div className="flex flex-col border border-[#E5E5E5] mb-0">
+            <button
+              type="button"
+              onClick={() => handleOAuth("google")}
+              disabled={loading || !!oauthLoading}
+              className="h-12 flex items-center justify-between px-6 bg-white text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-3">
+                <GoogleIcon className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {oauthLoading === "google" ? "Redirecting..." : "Continue with Google"}
+                </span>
+              </span>
+              {oauthLoading === "google"
+                ? <Loader2 className="w-3 h-3 animate-spin text-[#888]" />
+                : <span className="text-xs text-[#717171]">→</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth("github")}
+              disabled={loading || !!oauthLoading}
+              className="h-12 flex items-center justify-between px-6 bg-white text-black border-t border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-3">
+                <GithubIcon className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {oauthLoading === "github" ? "Redirecting..." : "Continue with GitHub"}
+                </span>
+              </span>
+              {oauthLoading === "github"
+                ? <Loader2 className="w-3 h-3 animate-spin text-[#888]" />
+                : <span className="text-xs text-[#717171]">→</span>}
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 flex items-center gap-4">
+            <div className="flex-1 border-t border-[#E5E5E5]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+              Or with email
+            </span>
+            <div className="flex-1 border-t border-[#E5E5E5]" />
+          </div>
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex flex-col border border-[#E5E5E5]">
 
@@ -194,17 +254,8 @@ export default function Login() {
             </Link>
           </div>
 
-          {/* Divider */}
-          <div className="my-6 flex items-center gap-4">
-            <div className="flex-1 border-t border-[#E5E5E5]" />
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-              Or
-            </span>
-            <div className="flex-1 border-t border-[#E5E5E5]" />
-          </div>
-
           {/* Register CTA */}
-          <div className="border border-[#E5E5E5]">
+          <div className="mt-6 border border-[#E5E5E5]">
             <Link
               to="/register"
               className="h-14 flex items-center justify-between px-6 bg-white text-black hover:bg-[#F5F5F5] transition-colors group"

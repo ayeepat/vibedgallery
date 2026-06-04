@@ -4,9 +4,11 @@ import { useAuth } from "@/lib/AuthContext";
 import { Loader2 } from "lucide-react";
 import Turnstile from "@/components/Turnstile";
 import { verifyTurnstile } from "@/lib/edgeFunctions";
+import GoogleIcon from "@/components/GoogleIcon";
+import GithubIcon from "@/components/GithubIcon";
 
 export default function Register() {
-  const { register, verifyOtp, resendOtp } = useAuth();
+  const { register, verifyOtp, resendOtp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
 
   // Two steps: 'register' → fill form | 'verify' → enter OTP
@@ -22,7 +24,19 @@ export default function Register() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [hasResent, setHasResent] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
+  const [oauthLoading, setOauthLoading] = useState("");
   const captchaRef = useRef(null);
+
+  const handleOAuth = async (provider) => {
+    setError("");
+    setOauthLoading(provider);
+    try {
+      await signInWithProvider(provider, { redirectPath: "/" });
+    } catch (err) {
+      setError(err.message || `Could not start ${provider} sign in.`);
+      setOauthLoading("");
+    }
+  };
 
   // ─── Cooldown timer effect ────────────────────────────────
   useEffect(() => {
@@ -350,6 +364,51 @@ export default function Register() {
               </p>
             </div>
           )}
+
+          {/* OAuth */}
+          <div className="flex flex-col border border-[#E5E5E5] mb-6">
+            <button
+              type="button"
+              onClick={() => handleOAuth("google")}
+              disabled={loading || !!oauthLoading}
+              className="h-12 flex items-center justify-between px-6 bg-white text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-3">
+                <GoogleIcon className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {oauthLoading === "google" ? "Redirecting..." : "Continue with Google"}
+                </span>
+              </span>
+              {oauthLoading === "google"
+                ? <Loader2 className="w-3 h-3 animate-spin text-[#888]" />
+                : <span className="text-xs text-[#717171]">→</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOAuth("github")}
+              disabled={loading || !!oauthLoading}
+              className="h-12 flex items-center justify-between px-6 bg-white text-black border-t border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="flex items-center gap-3">
+                <GithubIcon className="w-4 h-4" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {oauthLoading === "github" ? "Redirecting..." : "Continue with GitHub"}
+                </span>
+              </span>
+              {oauthLoading === "github"
+                ? <Loader2 className="w-3 h-3 animate-spin text-[#888]" />
+                : <span className="text-xs text-[#717171]">→</span>}
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="flex-1 border-t border-[#E5E5E5]" />
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+              Or with email
+            </span>
+            <div className="flex-1 border-t border-[#E5E5E5]" />
+          </div>
 
           <form onSubmit={handleRegister} className="flex flex-col border border-[#E5E5E5]">
 

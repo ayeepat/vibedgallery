@@ -3,7 +3,11 @@ import { useAuth } from "@/lib/AuthContext";
 import SearchBar from "@/components/SearchBar";
 
 export default function Nav({ hideSearch = false }) {
-  const { isAuthenticated, user, logout, isAdmin } = useAuth();
+  const { isAuthenticated, user, profile, logout, isAdmin } = useAuth();
+  const displayLabel =
+    profile?.name?.trim() ||
+    user?.email?.split("@")[0] ||
+    "Account";
   const { pathname } = useLocation();
 
   const navLinkClass = (path) => {
@@ -69,7 +73,7 @@ export default function Nav({ hideSearch = false }) {
                   : "text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
               }`}
             >
-              {user?.email?.split("@")[0]}
+              {displayLabel}
             </Link>
 
             {/* Sign Out */}

@@ -453,7 +453,7 @@ export default function Profile() {
 
             <div className="mt-8 flex flex-wrap gap-x-10 gap-y-3">
               {[
-                { label: "Email", value: user?.email },
+                { label: "Email", value: user?.email || "—" },
                 { label: "Member Since", value: memberSince },
                 { label: "Submissions", value: submissions.length },
               ].map((item, i) => (
