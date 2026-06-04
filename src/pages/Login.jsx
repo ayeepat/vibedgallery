@@ -15,6 +15,11 @@ export default function Login() {
 
   // Show success message if coming from password reset
   const resetSuccess = searchParams.get("reset") === "success";
+  // Where to send the user after a successful sign-in. ProtectedRoute sets
+  // ?from=/path when it bounces an unauthenticated user here.
+  const fromParam = searchParams.get("from") || "/";
+  // Refuse external destinations — only same-origin paths starting with "/".
+  const redirectTarget = fromParam.startsWith("/") && !fromParam.startsWith("//") ? fromParam : "/";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +28,7 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate("/");
+      navigate(redirectTarget, { replace: true });
     } catch (err) {
       if (
         err.message.includes("Invalid login") ||

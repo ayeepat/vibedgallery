@@ -162,7 +162,8 @@ function SubmissionCard({ app, onAction, loading }) {
 }
 
 export default function Profile() {
-  const { user, profile, isAuthenticated, isLoadingAuth, logout, updateProfile } = useAuth();
+  // <ProtectedRoute> guarantees user/profile are present before this mounts.
+  const { user, profile, isLoadingAuth, logout, updateProfile } = useAuth();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("account");
@@ -200,12 +201,6 @@ export default function Profile() {
   const providers = identities.map((i) => i.provider);
   const hasPasswordLogin = providers.includes("email");
   const oauthProviders = providers.filter((p) => p !== "email");
-
-  useEffect(() => {
-    if (!isLoadingAuth && !isAuthenticated) {
-      navigate("/login");
-    }
-  }, [isAuthenticated, isLoadingAuth, navigate]);
 
   useEffect(() => {
     if (profile) {
@@ -373,7 +368,7 @@ export default function Profile() {
     );
   }
 
-  if (!isAuthenticated || !profile) {
+  if (!profile) {
     return null;
   }
 

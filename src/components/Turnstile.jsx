@@ -72,7 +72,7 @@ export default function Turnstile({
     };
     // We intentionally don't include callbacks in deps — they'd cause the
     // widget to re-render every time the parent rerenders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [action, theme]);
 
   // Expose reset via the imperative innerRef.

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
@@ -22,11 +21,9 @@ const STATUS_LABELS = {
 }
 
 export default function Admin() {
-  const { user, isAuthenticated, isLoadingAuth } = useAuth()
-  const navigate = useNavigate()
-
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [checkingAdmin, setCheckingAdmin] = useState(true)
+  // Route-level <ProtectedRoute adminOnly> already guarantees the caller is
+  // signed-in AND admin before this component mounts — no need to re-check.
+  const { user } = useAuth()
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("pending_review")
@@ -107,40 +104,16 @@ export default function Admin() {
     }
   }
 
-  // Check admin status
-  useEffect(() => {
-    if (!isLoadingAuth && !isAuthenticated) {
-      navigate("/login")
-      return
-    }
-
-    if (user) {
-      supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.role !== "admin") {
-            navigate("/")
-            return
-          }
-          setIsAdmin(true)
-          setCheckingAdmin(false)
-        })
-    }
-  }, [user, isAuthenticated, isLoadingAuth])
-
   // Fetch apps
   useEffect(() => {
-    if (!isAdmin) return
     const t = setTimeout(fetchApps, search.trim() ? 250 : 0)
     return () => clearTimeout(t)
-  }, [isAdmin, filter, search])
+  }, [filter, search])
 
   const fetchApps = async () => {
     setLoading(true)
-    const term = search.trim()
+    // Strip PostgREST/SQL-LIKE meta chars so the `.or()` filter can't break.
+    const term = search.trim().replace(/[,()*:%_\\]/g, "")
 
     let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
 
@@ -185,7 +158,8 @@ export default function Admin() {
         .from("apps")
         .update({
           status: "approved",
-          ownership_verified: result.verified,
+          // Never downgrade a previously-verified row when force-approving.
+          ownership_verified: result.verified || app.ownership_verified === true,
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
         })
@@ -193,15 +167,8 @@ export default function Admin() {
 
       if (error) throw error
 
-      // Notify the submitter their app is live.
-      // selectedEmail is fetched via SECURITY DEFINER RPC; falls through to
-      // the edge function which can re-derive it from auth.users if needed.
-      sendEmail("approved", {
-        id: app.id,
-        title: app.title,
-        url: app.url,
-        submitter_email: selectedEmail,
-      })
+      // Recipient + content are derived server-side from app.id.
+      sendEmail("approved", { id: app.id })
 
       setApps((prev) => prev.filter((a) => a.id !== app.id))
       setSelected(null)
@@ -233,16 +200,8 @@ export default function Admin() {
 
       if (error) throw error
 
-      // Notify the submitter with the rejection reason.
-      sendEmail(
-        "rejected",
-        {
-          id: app.id,
-          title: app.title,
-          submitter_email: selectedEmail,
-        },
-        { rejectionReason }
-      )
+      // Recipient + content are derived server-side from app.id.
+      sendEmail("rejected", { id: app.id }, { rejectionReason })
 
       setApps((prev) => prev.filter((a) => a.id !== app.id))
       setSelected(null)
@@ -253,14 +212,6 @@ export default function Admin() {
     } finally {
       setActionLoading(false)
     }
-  }
-
-  if (checkingAdmin || isLoadingAuth) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-[#717171]" />
-      </div>
-    )
   }
 
   return (

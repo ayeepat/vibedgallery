@@ -207,7 +207,8 @@ function FieldError({ msg }) {
 
 // ─── Main ─────────────────────────────────────────────────────
 export default function Submit() {
-  const { user, isAuthenticated } = useAuth();
+  // <ProtectedRoute> guarantees the user is signed in before this mounts.
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const defaultForm = {
@@ -408,20 +409,10 @@ export default function Submit() {
       }
 
       // Fire-and-forget emails: confirmation to submitter + alert to admin.
-      // Failures are logged inside sendEmail and never block submission.
-      // submitter_email isn't returned in `data` anymore (column hidden from
-      // the API), but the edge function can look it up from auth.users itself.
-      const emailApp = {
-        id: data.id,
-        title: data.title,
-        tagline: data.tagline,
-        url: data.url,
-        submitter_email: user.email,
-        category: data.category,
-        primary_tool: data.primary_tool,
-      };
-      sendEmail("submission_confirmation", emailApp);
-      sendEmail("admin_notification", emailApp);
+      // The edge function looks up the recipient + content from the DB row;
+      // we only pass the app id.
+      sendEmail("submission_confirmation", { id: data.id });
+      sendEmail("admin_notification", { id: data.id });
 
       clearDraft();
       setVerificationToken(token);
@@ -471,34 +462,6 @@ export default function Submit() {
     setErrors({});
     setGlobalError("");
   };
-
-  // ─── Not logged in ───────────────────────────────────────────
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col">
-        <Nav hideSearch />
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">Account Required</p>
-          <h1 className="text-4xl font-black uppercase text-center leading-none" style={{ letterSpacing: "-0.04em" }}>
-            SIGN IN TO<br />SUBMIT.
-          </h1>
-          <p className="text-sm text-[#717171] text-center max-w-xs">
-            You need an account to submit your app to the gallery.
-          </p>
-          <div className="flex flex-col w-full max-w-xs border border-[#E5E5E5]">
-            <Link to="/register" className="h-14 flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors group">
-              <span className="text-[10px] font-bold uppercase tracking-widest">Create Account</span>
-              <span className="text-xs text-[#888] group-hover:text-[#bbb]">→</span>
-            </Link>
-            <Link to="/login" className="h-12 flex items-center justify-between px-6 bg-white text-black border-t border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors group">
-              <span className="text-[10px] font-bold uppercase tracking-widest">Sign In</span>
-              <span className="text-xs text-[#717171] group-hover:text-black">→</span>
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ─── Verification step ───────────────────────────────────────
   if (step === "verification") {

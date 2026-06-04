@@ -40,7 +40,16 @@ export default function SearchBar() {
       setLoading(true);
 
       try {
-        const term = query.trim();
+        // Strip characters that break PostgREST's `or()` filter syntax
+        // (commas, parens, colons, asterisks) and SQL LIKE wildcards
+        // (%, _, \). Anything left is safe to interpolate into the pattern.
+        const term = query.trim().replace(/[,()*:%_\\]/g, "");
+        if (!term) {
+          setResults([]);
+          setOpen(false);
+          setLoading(false);
+          return;
+        }
         const pattern = `%${term}%`;
 
         // One round trip across title / tagline / category / primary_tool.
@@ -122,8 +131,11 @@ export default function SearchBar() {
 
   // Highlight matching text
   const highlightMatch = (text) => {
-    if (!query.trim()) return text;
-    const regex = new RegExp(`(${query.trim()})`, "gi");
+    const term = query.trim();
+    if (!term) return text;
+    // Escape regex special chars so user input like "(" doesn't crash here.
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "gi");
     const parts = text.split(regex);
     return parts.map((part, i) =>
       regex.test(part) ? (

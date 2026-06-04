@@ -1,9 +1,14 @@
 import { supabase } from '@/lib/supabaseClient'
 
 // Generate a unique verification token
+// 128 bits of entropy via crypto.getRandomValues, base36-encoded.
+// (Math.random was previously used — predictable + only 8 base36 chars.)
 export function generateVerificationToken() {
-  const random = Math.random().toString(36).substring(2, 10)
-  return `vg-verify-${random}`
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  // Hex encoding keeps the token URL-safe and filesystem-safe.
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `vg-verify-${hex}`
 }
 
 // Get the verification file instructions
