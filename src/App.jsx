@@ -3,6 +3,8 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider } from '@/lib/AuthContext';
 import ErrorBoundary from '@/components/ErrorBoundary';
@@ -67,6 +69,8 @@ function App() {
             <ScrollToTop />
             <AnimatedRoutes />
             <Toaster />
+            <Analytics />
+            <SpeedInsights />
           </QueryClientProvider>
         </AuthProvider>
       </Router>
