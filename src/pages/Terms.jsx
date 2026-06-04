@@ -151,7 +151,7 @@ export default function Terms() {
             <p>
               Questions about these terms? Reach us at{" "}
               <a className="link" href="mailto:hello@vibedgallery.com">
-                hello@vibedgallery.com
+                support@vibedgallery.com
               </a>
               .
             </p>
