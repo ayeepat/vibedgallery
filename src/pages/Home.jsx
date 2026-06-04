@@ -54,15 +54,24 @@ export default function Home() {
         {/* Left 60% — Static hero */}
         <div className="w-[60%] border-r border-[#E5E5E5] flex flex-col justify-between p-12">
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
-            <motion.p
+            <motion.div
               initial="hidden"
               animate="visible"
               custom={0}
               variants={heroLineVariants}
-              className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-6"
+              className="flex items-center gap-3 mb-6"
             >
-              A gallery for apps built with AI
-            </motion.p>
+              <img
+                src="/logovibed.png"
+                alt="VibedGallery logo"
+                width="40"
+                height="40"
+                className="h-10 w-10"
+              />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+                A gallery for apps built with AI
+              </span>
+            </motion.div>
             <h1
               className="text-[clamp(2.5rem,5vw,5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
@@ -85,9 +94,11 @@ export default function Home() {
               animate="visible"
               custom={4}
               variants={heroLineVariants}
-              className="mt-6 text-sm text-[#717171] max-w-xs leading-relaxed"
+              className="mt-6 text-sm text-[#717171] max-w-sm leading-relaxed"
             >
-              A collection of real apps built with AI coding tools. Browse them, try them, and add your own.
+              VibedGallery is a public gallery of real apps built with AI coding
+              tools. Browse what people are building, try the apps live, and
+              submit your own.
             </motion.p>
           </div>
 
