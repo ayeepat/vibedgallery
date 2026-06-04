@@ -107,14 +107,23 @@ export const AuthProvider = ({ children }) => {
   // Kick off an OAuth sign-in. Supabase redirects the browser to the provider,
   // then the provider redirects back to `redirectTo`. AuthCallback finishes
   // the handoff and routes the user to the original destination.
+  //
+  // We stash the post-login "next" path in sessionStorage instead of appending
+  // it to the redirect URL — adding a query string to `redirectTo` can trip
+  // Supabase's redirect-URL allow-list matching and force a fall-back to the
+  // Site URL.
   const signInWithProvider = async (provider, { redirectPath = '/' } = {}) => {
     setAuthError(null);
     const safePath = redirectPath.startsWith('/') && !redirectPath.startsWith('//')
       ? redirectPath
       : '/';
-    const redirectTo =
-      `${window.location.origin}/auth/callback` +
-      `?next=${encodeURIComponent(safePath)}`;
+    try {
+      sessionStorage.setItem('postAuthRedirect', safePath);
+    } catch {
+      // sessionStorage can throw in private windows; the callback page will
+      // just default to '/' in that case.
+    }
+    const redirectTo = `${window.location.origin}/auth/callback`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo },

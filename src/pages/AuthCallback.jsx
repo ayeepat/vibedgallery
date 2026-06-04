@@ -4,16 +4,17 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 // Lands here after an OAuth provider redirects back. The Supabase client is
-// configured with detectSessionInUrl, so by the time this mounts it has
-// already exchanged the code / fragment for a session. We just wait for it
-// and forward the user to the `next` path.
+// configured with detectSessionInUrl + PKCE, so by the time this mounts it
+// has already exchanged the ?code= param for a session. We wait for that
+// session and forward the user to the path stashed in sessionStorage.
 export default function AuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState("");
 
   // Surface provider-side errors (?error=access_denied&error_description=...).
-  const providerError = searchParams.get("error_description") || searchParams.get("error");
+  const providerError =
+    searchParams.get("error_description") || searchParams.get("error");
 
   useEffect(() => {
     if (providerError) {
@@ -21,11 +22,21 @@ export default function AuthCallback() {
       return;
     }
 
-    const nextParam = searchParams.get("next") || "/";
-    const next =
-      nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
+    // Pull the stashed "next" path; fall back to root.
+    let next = "/";
+    try {
+      const stored = sessionStorage.getItem("postAuthRedirect");
+      if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
+        next = stored;
+      }
+      sessionStorage.removeItem("postAuthRedirect");
+    } catch {
+      // sessionStorage might be unavailable in private mode — just use "/".
+    }
 
     let cancelled = false;
+    let subscription;
+    let timeout;
 
     const finish = (session) => {
       if (cancelled) return;
@@ -37,34 +48,28 @@ export default function AuthCallback() {
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
       if (session) {
         finish(session);
         return;
       }
-      // Session not on disk yet — wait for the SIGNED_IN event the SDK fires
-      // once it finishes exchanging the code in the URL.
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (_event, sess) => {
-          if (sess) finish(sess);
-        }
-      );
-      // Give the SDK a moment, then bail with an error if nothing arrived.
-      const timeout = setTimeout(() => {
-        if (!cancelled) {
-          subscription?.unsubscribe?.();
-          setError("Sign in timed out. Please try again.");
-        }
-      }, 8000);
-      return () => {
-        clearTimeout(timeout);
-        subscription?.unsubscribe?.();
-      };
+      // The SDK might still be mid-exchange — wait for SIGNED_IN.
+      const sub = supabase.auth.onAuthStateChange((_event, sess) => {
+        if (sess) finish(sess);
+      });
+      subscription = sub.data.subscription;
+      timeout = setTimeout(() => {
+        if (cancelled) return;
+        setError("Sign in timed out. Please try again.");
+      }, 10000);
     });
 
     return () => {
       cancelled = true;
+      if (timeout) clearTimeout(timeout);
+      subscription?.unsubscribe?.();
     };
-  }, [navigate, providerError, searchParams]);
+  }, [navigate, providerError]);
 
   if (error) {
     return (

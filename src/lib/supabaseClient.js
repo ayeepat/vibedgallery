@@ -16,5 +16,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     storageKey: 'vibedgallery_access_token',
     detectSessionInUrl: true,
+    // PKCE keeps OAuth callback URLs short (?code=abc) and is more secure
+    // than the legacy implicit flow (which returns the full JWT in the URL
+    // hash and trips Safari on long URLs).
+    flowType: 'pkce',
   }
 })
