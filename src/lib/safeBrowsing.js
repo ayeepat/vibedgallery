@@ -21,6 +21,13 @@ export async function checkUrlSafety(url) {
       }
     }
 
+    // Operator hasn't configured GOOGLE_SAFE_BROWSING_KEY. Don't block
+    // submissions on a server config gap — accept the URL but flag it so
+    // admins can see it bypassed Safe Browsing in the queue.
+    if (data.skipped) {
+      return { safe: true, threats: [], skipped: true }
+    }
+
     return data
   } catch (err) {
     console.error('checkUrlSafety failed:', err)

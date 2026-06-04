@@ -436,12 +436,34 @@ export default function Submit() {
     }
   };
 
+  // User claims the file is deployed. We still transition to pending_review
+  // (admin re-runs verify-html before approving) but optimistically mark
+  // ownership_verified so the queue tile reads correctly.
   const handleVerificationDone = async () => {
     setLoading(true);
     try {
       const { error } = await supabase
         .from("apps")
         .update({ ownership_verified: true, status: "pending_review" })
+        .eq("id", submittedAppId);
+      if (error) throw error;
+      setStep("success");
+    } catch (err) {
+      setGlobalError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // "Skip for now" — user wants to deploy the file later. Still move the
+  // row into the admin queue (status=pending_review) but DO NOT claim
+  // ownership_verified. Admin will run verify-html before approving.
+  const handleSkipVerification = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from("apps")
+        .update({ status: "pending_review" })
         .eq("id", submittedAppId);
       if (error) throw error;
       setStep("success");
@@ -608,8 +630,9 @@ export default function Submit() {
                 {loading && <Loader2 className="w-3 h-3 animate-spin" />}
               </button>
               <button
-                onClick={() => setStep("success")}
-                className="h-10 w-full flex items-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors border-t border-[#E5E5E5]"
+                onClick={handleSkipVerification}
+                disabled={loading}
+                className="h-10 w-full flex items-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors border-t border-[#E5E5E5] disabled:opacity-50"
               >
                 Skip for now — verify later
               </button>
