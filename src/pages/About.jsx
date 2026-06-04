@@ -18,18 +18,9 @@ export default function About() {
       <main className="flex-1 pt-14">
         <section className="border-b border-[#E5E5E5]">
           <div className="max-w-3xl mx-auto px-8 py-16">
-            <div className="flex items-center gap-3 mb-6">
-              <img
-                src="/logovibed.png"
-                alt="VibedGallery logo"
-                width="40"
-                height="40"
-                className="h-10 w-10"
-              />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
-                About
-              </p>
-            </div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-6">
+              About
+            </p>
             <h1
               className="text-[clamp(2.5rem,5vw,4.5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
@@ -77,7 +68,7 @@ export default function About() {
               .
             </p>
             <p>
-              See our <Link className="link" to="/terms">Terms</Link> and <Link className="link" to="/privacy">Privacy Policy</Link> for the legal details.
+              See our <a className="link" href="/terms">Terms</a> and <a className="link" href="/privacy">Privacy Policy</a> for the legal details.
             </p>
           </Section>
         </article>
