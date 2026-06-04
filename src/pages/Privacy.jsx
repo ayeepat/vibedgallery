@@ -131,7 +131,7 @@ export default function Privacy() {
             </ul>
             <p>
               To exercise any of these rights, email{" "}
-              <a className="link" href="mailto:privacy@vibedgallery.com">privacy@vibedgallery.com</a>. We may need to verify your identity before acting on a request.
+              <a className="link" href="mailto:support@vibedgallery.com">support@vibedgallery.com</a>. We may need to verify your identity before acting on a request.
             </p>
             <p>
               California residents have additional rights under the CCPA / CPRA, including the right to know what categories of personal information we collect, to delete it, and to opt out of any &ldquo;sale&rdquo; or &ldquo;sharing&rdquo; — we do not sell or share personal information for cross-context behavioral advertising.
@@ -173,8 +173,8 @@ export default function Privacy() {
           <Section title="12. Contact">
             <p>
               Privacy questions, requests, or complaints:{" "}
-              <a className="link" href="mailto:privacy@vibedgallery.com">
-                privacy@vibedgallery.com
+              <a className="link" href="mailto:support@vibedgallery.com">
+                support@vibedgallery.com
               </a>
               .
             </p>
