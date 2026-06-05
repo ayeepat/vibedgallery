@@ -103,6 +103,10 @@ export function useApprovedAppsInfinite({ sort = 'Newest', category = null } = {
         query = query
           .order('upvotes', { ascending: false })
           .order('created_at', { ascending: false })
+      } else if (sort === 'Most Viewed') {
+        query = query
+          .order('views', { ascending: false })
+          .order('created_at', { ascending: false })
       } else {
         query = query.order('created_at', { ascending: false })
       }

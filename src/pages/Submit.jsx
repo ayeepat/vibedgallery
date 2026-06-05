@@ -11,6 +11,7 @@ import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
 import Turnstile from "@/components/Turnstile";
 import { usePageMeta } from "@/lib/usePageMeta";
+import { toast } from "@/components/ui/use-toast";
 
 const CATEGORIES = [
   "Productivity", "Creative", "Developer Tool", "Game",
@@ -69,6 +70,18 @@ function downloadVerificationFile(token) {
 </html>`;
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
+
+  // iOS Safari (and Safari private mode) ignores the `download` attribute and
+  // blocks programmatic Blob downloads. Detect Safari and fall back to opening
+  // the file in a new tab so the user can long-press → Save.
+  const ua = navigator.userAgent;
+  const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
+  if (isSafari) {
+    window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    return;
+  }
+
   const a = document.createElement("a");
   a.href = url;
   a.download = `${token}.html`;
@@ -458,13 +471,18 @@ export default function Submit() {
       setSubmittedAppId(data.id);
       setStep("verification");
       window.scrollTo({ top: 0, behavior: "smooth" });
+      toast({
+        title: "Submission received",
+        description: "Now deploy the verification file to prove ownership.",
+      });
 
     } catch (err) {
       console.error("Submission failed:", err);
       const raw = err?.message || "";
-      // Map the server-side rate-limit exception to a clean user-facing line.
+      // Map the server-side rate-limit exception to a clean, generic line —
+      // never echo the raw "5 per hour" policy text back to the user.
       if (/rate limit/i.test(raw)) {
-        setGlobalError(raw.replace(/^.*rate limit:\s*/i, ""));
+        setGlobalError("You're submitting too quickly. Please wait a few minutes and try again.");
       } else {
         setGlobalError(raw || "Something went wrong. Please try again.");
       }

@@ -50,9 +50,9 @@ export default function Home() {
       <Nav hideSearch />
 
       {/* Hero */}
-      <section className="h-screen flex border-b border-[#E5E5E5] pt-14">
+      <section className="md:h-screen flex flex-col md:flex-row border-b border-[#E5E5E5] pt-14">
         {/* Left 60% — Static hero */}
-        <div className="w-[60%] border-r border-[#E5E5E5] flex flex-col justify-between p-12">
+        <div className="w-full md:w-[60%] border-b md:border-b-0 md:border-r border-[#E5E5E5] flex flex-col justify-between p-6 md:p-12 gap-10 md:gap-0">
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
             <motion.p
               initial="hidden"
@@ -112,7 +112,7 @@ export default function Home() {
         </div>
 
         {/* Right 40% — Marquee */}
-        <div className="w-[40%] overflow-hidden relative flex items-center">
+        <div className="w-full md:w-[40%] h-[40vh] md:h-auto overflow-hidden relative flex items-center">
           <div className="animate-marquee-up flex flex-col w-full">
             {doubled.map((name, i) => (
               <div key={i} className="py-3 px-8 border-b border-[#E5E5E5]">
@@ -165,7 +165,8 @@ export default function Home() {
                 <div className="relative aspect-video overflow-hidden bg-[#F0F0F0]">
                   <img
                     src={app.image}
-                    alt={app.name}
+                    alt={app.name ? `${app.name} preview` : "App preview"}
+                    loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   {app.ownership_verified && (

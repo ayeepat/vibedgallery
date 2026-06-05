@@ -69,7 +69,16 @@ export async function verifyTurnstile(token, action) {
   if (!token) return { success: false, error: 'Missing captcha token' }
 
   // Dev-mode bypass — must mirror the sentinel in src/components/Turnstile.jsx.
-  if (token === 'DEV_BYPASS' && !import.meta.env.VITE_TURNSTILE_SITE_KEY) {
+  // Only honored in a Vite dev build AND when no site key is configured.
+  // In production bundles `import.meta.env.DEV` is statically false, so even
+  // if VITE_TURNSTILE_SITE_KEY is accidentally unset, an attacker submitting
+  // the literal "DEV_BYPASS" string will fall through to the real server-side
+  // Turnstile check (which will reject it).
+  if (
+    import.meta.env.DEV &&
+    token === 'DEV_BYPASS' &&
+    !import.meta.env.VITE_TURNSTILE_SITE_KEY
+  ) {
     return { success: true, dev: true }
   }
 

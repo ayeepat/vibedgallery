@@ -16,6 +16,8 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 const metaVariants = {
@@ -186,6 +188,7 @@ export default function Profile() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
 
   const [displayNameError, setDisplayNameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -693,12 +696,34 @@ export default function Profile() {
                   </div>
                 )}
 
+                <div className="px-6 py-4 border-b border-[#E5E5E5] flex items-center justify-between">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+                    {showPasswords ? "Passwords visible" : "Passwords hidden"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords((v) => !v)}
+                    className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors"
+                    aria-label={showPasswords ? "Hide passwords" : "Show passwords"}
+                  >
+                    {showPasswords ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" /> Hide
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5" /> Show
+                      </>
+                    )}
+                  </button>
+                </div>
+
                 <div className="px-6 py-4 border-b border-[#E5E5E5]">
                   <label className="block text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
                     Current Password
                   </label>
                   <input
-                    type="password"
+                    type={showPasswords ? "text" : "password"}
                     value={currentPassword}
                     onChange={(e) => {
                       setCurrentPassword(e.target.value);
@@ -715,7 +740,7 @@ export default function Profile() {
                     New Password
                   </label>
                   <input
-                    type="password"
+                    type={showPasswords ? "text" : "password"}
                     value={newPassword}
                     onChange={(e) => {
                       setNewPassword(e.target.value);
@@ -732,7 +757,7 @@ export default function Profile() {
                     Confirm Password
                   </label>
                   <input
-                    type="password"
+                    type={showPasswords ? "text" : "password"}
                     value={confirmPassword}
                     onChange={(e) => {
                       setConfirmPassword(e.target.value);

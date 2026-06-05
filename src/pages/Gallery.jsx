@@ -8,7 +8,7 @@ import { useApprovedAppsInfinite } from "@/lib/useApps";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 
-const SORTS = ["Newest", "Trending"];
+const SORTS = ["Newest", "Trending", "Most Viewed"];
 // Mirrors CATEGORIES in src/pages/Submit.jsx so the dropdown can never offer
 // something nobody could possibly submit.
 const CATEGORIES = [
@@ -42,6 +42,8 @@ export default function Gallery() {
   const {
     data,
     isLoading,
+    isError,
+    refetch,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -124,6 +126,25 @@ export default function Gallery() {
               <GalleryCardSkeleton key={i} />
             ))}
           </div>
+        ) : isError ? (
+          <div className="border border-[#E5E5E5] px-10 py-16 flex flex-col items-center text-center max-w-2xl mx-auto">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-red-600">Failed to load</p>
+            <h2
+              className="mt-3 text-3xl font-black uppercase text-black leading-none"
+              style={{ letterSpacing: "-0.03em" }}
+            >
+              Something went wrong
+            </h2>
+            <p className="mt-4 text-sm text-[#717171] max-w-sm leading-relaxed">
+              We couldn't reach the gallery. Check your connection and try again.
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-8 h-12 px-8 flex items-center gap-6 bg-black text-white hover:bg-[#222] transition-colors"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest">Retry</span>
+            </button>
+          </div>
         ) : apps.length === 0 ? (
           <div className="border border-[#E5E5E5] px-10 py-16 flex flex-col items-center text-center max-w-2xl mx-auto">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">Empty</p>
@@ -174,7 +195,8 @@ export default function Gallery() {
                   <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
                     <img
                       src={app.image}
-                      alt={app.name}
+                      alt={app.name ? `${app.name} preview` : "App preview"}
+                      loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                     {/* Verified ownership badge */}

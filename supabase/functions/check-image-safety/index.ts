@@ -97,6 +97,12 @@ Deno.serve(async (req) => {
     return json({ safe: true, skipped: true });
   }
 
+  // Hard timeout so a slow/hung Vision API can't keep the function alive
+  // indefinitely (Supabase default is generous, and we hold no useful state
+  // while waiting).
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
   try {
     const upstream = await fetch(
       `https://vision.googleapis.com/v1/images:annotate?key=${API_KEY}`,
@@ -111,6 +117,7 @@ Deno.serve(async (req) => {
             },
           ],
         }),
+        signal: controller.signal,
       },
     );
 
@@ -157,10 +164,15 @@ Deno.serve(async (req) => {
       classifications: annotation,
     });
   } catch (err) {
-    console.error("check-image-safety error", err);
+    const isAbort = (err as Error)?.name === "AbortError";
+    console.error("check-image-safety error", isAbort ? "timeout" : err);
     return json({
       safe: false,
-      error: "Image safety check failed. Please try again.",
+      error: isAbort
+        ? "Image safety check timed out. Please try again."
+        : "Image safety check failed. Please try again.",
     });
+  } finally {
+    clearTimeout(timeoutId);
   }
 });

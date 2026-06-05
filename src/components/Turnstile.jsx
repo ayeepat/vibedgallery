@@ -25,11 +25,10 @@ export default function Turnstile({
   const [ready, setReady] = useState(false);
 
   // Local-dev escape hatch: no site key = auto-pass with a sentinel token.
-  // The edge function will refuse this token in prod (Cloudflare will return
-  // invalid-input-response), so this only "works" when the server-side
-  // verify is also bypassed. Useful for local form testing.
+  // Gated on import.meta.env.DEV so a production build never silently emits
+  // the bypass token even if VITE_TURNSTILE_SITE_KEY is accidentally unset.
   useEffect(() => {
-    if (!SITE_KEY && onVerify) onVerify("DEV_BYPASS");
+    if (import.meta.env.DEV && !SITE_KEY && onVerify) onVerify("DEV_BYPASS");
   }, [onVerify]);
 
   // Wait for Cloudflare's script to define window.turnstile, then mount.
@@ -88,6 +87,16 @@ export default function Turnstile({
   }, [innerRef, ready]);
 
   if (!SITE_KEY) {
+    if (!import.meta.env.DEV) {
+      // Misconfigured prod build — refuse to render anything that could be
+      // mistaken for a passed captcha. The submit form will keep its CTA
+      // disabled because onVerify never fires.
+      return (
+        <p className={`text-[9px] font-bold uppercase tracking-widest text-red-600 ${className}`}>
+          Captcha unavailable — please refresh or contact support.
+        </p>
+      );
+    }
     return (
       <p className={`text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] ${className}`}>
         Captcha disabled (no site key set) — dev mode

@@ -113,8 +113,10 @@ export default function Admin() {
 
   const fetchApps = async () => {
     setLoading(true)
-    // Strip PostgREST/SQL-LIKE meta chars so the `.or()` filter can't break.
-    const term = search.trim().replace(/[,()*:%_\\]/g, "")
+    // Strip PostgREST/SQL-LIKE meta chars and the `.` field separator so the
+    // `.or()` filter can't be coerced into selecting a different column.
+    // Also cap length so a pathological input can't generate a multi-KB URL.
+    const term = search.trim().replace(/[,()*:%_\\.]/g, "").slice(0, 80)
 
     let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
 
@@ -129,7 +131,9 @@ export default function Admin() {
       query = query.eq("status", filter)
     }
 
-    const { data, error } = await query.order("created_at", { ascending: false })
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(200)
 
     if (!error) setApps(data || [])
     setLoading(false)
@@ -446,7 +450,7 @@ export default function Admin() {
                     <div className="grid grid-cols-2 gap-3">
                       {selected.screenshot_urls.map((url, i) => (
                         <div key={i} className="border border-[#E5E5E5] aspect-video overflow-hidden">
-                          <img src={url} alt={`screenshot ${i}`} className="w-full h-full object-cover" />
+                          <img src={url} alt={`${selected.title || "App"} screenshot ${i + 1}`} className="w-full h-full object-cover" />
                         </div>
                       ))}
                     </div>
@@ -494,12 +498,22 @@ export default function Admin() {
 
                     {/* Rejection reason */}
                     <div className="border-b border-[#E5E5E5]">
-                      <label className="block px-4 pt-3 text-[9px] font-bold uppercase tracking-widest text-[#717171]">
-                        Rejection Reason (required if rejecting)
-                      </label>
+                      <div className="flex items-center justify-between px-4 pt-3">
+                        <label className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+                          Rejection Reason (required if rejecting)
+                        </label>
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-widest tabular-nums ${
+                            rejectionReason.length > 1900 ? "text-red-600" : "text-[#AAAAAA]"
+                          }`}
+                        >
+                          {rejectionReason.length} / 2000
+                        </span>
+                      </div>
                       <textarea
                         value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
+                        onChange={(e) => setRejectionReason(e.target.value.slice(0, 2000))}
+                        maxLength={2000}
                         placeholder="Tell the submitter why their app was rejected..."
                         rows={3}
                         className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none resize-none"

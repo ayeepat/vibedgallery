@@ -24,6 +24,22 @@ export default function SearchBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Global Escape: close dropdown and restore focus to the input.
+  // Document-level listener catches Escape even if focus has wandered off
+  // the input (e.g. after the user moused over a result).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        setHighlighted(-1);
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
   // Debounced search
   useEffect(() => {
     if (!query.trim()) {
@@ -106,6 +122,13 @@ export default function SearchBar() {
 
   // Keyboard navigation
   const handleKeyDown = (e) => {
+    // Escape should always work, even if the dropdown is closed or empty.
+    if (e.key === "Escape") {
+      setOpen(false);
+      setHighlighted(-1);
+      inputRef.current?.blur();
+      return;
+    }
     if (!open || results.length === 0) return;
 
     if (e.key === "ArrowDown") {
@@ -117,9 +140,6 @@ export default function SearchBar() {
     } else if (e.key === "Enter" && highlighted >= 0) {
       e.preventDefault();
       goToApp(results[highlighted]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-      inputRef.current?.blur();
     }
   };
 

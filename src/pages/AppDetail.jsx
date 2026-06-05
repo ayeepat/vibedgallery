@@ -78,11 +78,13 @@ export default function AppDetail() {
   useEffect(() => {
     if (!app?.id) return;
     if (!markViewedThisSession(app.id)) return;
-    supabase
-      .rpc("increment_app_views", { target_app_id: app.id })
+    Promise.resolve(
+      supabase.rpc("increment_app_views", { target_app_id: app.id })
+    )
       .then(({ error: rpcError }) => {
         if (rpcError) console.warn("view counter failed:", rpcError.message);
-      });
+      })
+      .catch((err) => console.warn("view counter threw:", err?.message ?? err));
   }, [app?.id]);
 
   // Per-app meta. usePageMeta safely handles undefined values — it falls back
