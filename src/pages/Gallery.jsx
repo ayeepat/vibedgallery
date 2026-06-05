@@ -65,7 +65,7 @@ export default function Gallery() {
       {/* Filter bar */}
       <div className="fixed top-14 left-0 right-0 z-40 bg-white border-b border-[#E5E5E5] flex items-center px-6 h-10">
         {/* Sort */}
-        {SORTS.map((s, i) => (
+        {SORTS.map((s) => (
           <button
             key={s}
             onClick={() => setSort(s)}

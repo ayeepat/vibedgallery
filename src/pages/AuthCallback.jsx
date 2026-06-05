@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { sanitizeRedirectPath } from "@/lib/urlHelpers";
 
 // Lands here after an OAuth provider redirects back. The Supabase client is
 // configured with detectSessionInUrl + PKCE, so by the time this mounts it
@@ -25,10 +26,7 @@ export default function AuthCallback() {
     // Pull the stashed "next" path; fall back to root.
     let next = "/";
     try {
-      const stored = sessionStorage.getItem("postAuthRedirect");
-      if (stored && stored.startsWith("/") && !stored.startsWith("//")) {
-        next = stored;
-      }
+      next = sanitizeRedirectPath(sessionStorage.getItem("postAuthRedirect"));
       sessionStorage.removeItem("postAuthRedirect");
     } catch {
       // sessionStorage might be unavailable in private mode — just use "/".

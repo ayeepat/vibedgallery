@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
+import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import Nav from "@/components/Nav";
 import { Loader2, Check, X, ExternalLink, Search, ShieldCheck } from "lucide-react";
@@ -138,6 +139,26 @@ export default function Admin() {
     setActionLoading(true)
     setVerifyResult(null)
     try {
+      // Re-run Google Safe Browsing against the live URL at approval time.
+      // The safe_browsing_passed flag stored at submission is supplied by the
+      // client and must NOT be trusted — a crafted insert could set it true on
+      // a malicious URL. We recompute it server-side here before the app can go
+      // public, and require an explicit override if it's flagged.
+      if (app.url) {
+        const safety = await checkUrlSafety(app.url)
+        if (safety.error) {
+          const proceed = window.confirm(
+            `Could not re-check URL safety (${safety.error}).\n\nApprove anyway?`
+          )
+          if (!proceed) { setActionLoading(false); return }
+        } else if (!safety.safe && !safety.skipped) {
+          const proceed = window.confirm(
+            `⚠ URL flagged UNSAFE by Safe Browsing: ${(safety.threats || []).join(", ")}\n${app.url}\n\nApprove anyway?`
+          )
+          if (!proceed) { setActionLoading(false); return }
+        }
+      }
+
       // Server-side check that the verification file really exists at the URL.
       let result = { verified: true }
       if (app.verification_token && app.url) {

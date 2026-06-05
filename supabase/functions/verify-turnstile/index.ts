@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
     return json(
       {
         success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: "Captcha verification error. Please try again.",
       },
       502
     );

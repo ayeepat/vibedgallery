@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
+import { sanitizeRedirectPath } from "@/lib/urlHelpers";
 import { Loader2 } from "lucide-react";
 import GoogleIcon from "@/components/GoogleIcon";
 import GithubIcon from "@/components/GithubIcon";
@@ -26,10 +27,9 @@ export default function Login() {
   // Show success message if coming from password reset
   const resetSuccess = searchParams.get("reset") === "success";
   // Where to send the user after a successful sign-in. ProtectedRoute sets
-  // ?from=/path when it bounces an unauthenticated user here.
-  const fromParam = searchParams.get("from") || "/";
-  // Refuse external destinations — only same-origin paths starting with "/".
-  const redirectTarget = fromParam.startsWith("/") && !fromParam.startsWith("//") ? fromParam : "/";
+  // ?from=/path when it bounces an unauthenticated user here. Refuse external
+  // destinations — only same-origin paths.
+  const redirectTarget = sanitizeRedirectPath(searchParams.get("from"));
 
   const handleSubmit = async (e) => {
     e.preventDefault();

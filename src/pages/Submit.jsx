@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
 import { checkImageSafety, uploadImage } from "@/lib/imageCheck";
 import { sendEmail, verifyTurnstile } from "@/lib/edgeFunctions";
 import { checkUrlSafety } from "@/lib/safeBrowsing";
-import { APP_SELECT_COLUMNS } from "@/lib/useApps";
+import { normalizeUrl } from "@/lib/urlHelpers";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
 import Nav from "@/components/Nav";
 import Turnstile from "@/components/Turnstile";
@@ -25,22 +25,13 @@ const TOOLS = [
 const STORAGE_KEY = "vibedgallery_submit_draft";
 const DRAFT_TTL = 30 * 60 * 1000;
 
-// ─── Normalize URL ─────────────────────────────────────────────
-function normalizeUrl(input) {
-  if (!input) return "";
-  let url = input.trim();
-  if (url.length < 3) return url;
-  if (!/^https?:\/\//i.test(url)) {
-    url = "https://" + url;
-  }
-  return url;
-}
-
 // ─── Draft helpers ─────────────────────────────────────────────
 function saveDraft(form) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, savedAt: Date.now() }));
-  } catch (e) {}
+  } catch {
+    // Storage may be full or blocked (private mode) — drafts are best-effort.
+  }
 }
 
 function loadDraft() {
@@ -53,7 +44,7 @@ function loadDraft() {
       return null;
     }
     return data.form;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -210,7 +201,6 @@ function FieldError({ msg }) {
 export default function Submit() {
   // <ProtectedRoute> guarantees the user is signed in before this mounts.
   const { user } = useAuth();
-  const navigate = useNavigate();
 
   usePageMeta({
     title: "Submit Your App",
@@ -229,7 +219,9 @@ export default function Submit() {
   const [form, setForm] = useState(() => loadDraft() || defaultForm);
   const [thumbnail, setThumbnail] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
-  const [thumbnailStatus, setThumbnailStatus] = useState("idle");
+  // Only the setter is consumed (drives the per-field upload state machine);
+  // the value isn't read directly, so we skip binding it.
+  const [, setThumbnailStatus] = useState("idle");
   const [screenshots, setScreenshots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("idle");
@@ -276,7 +268,7 @@ export default function Submit() {
       setThumbnail(file);
       setThumbnailPreview(URL.createObjectURL(file));
       setThumbnailStatus("ready");
-    } catch (err) {
+    } catch {
       setErrors((e) => ({ ...e, thumbnail: "Failed to process image" }));
       setThumbnailStatus("error");
     }
@@ -408,7 +400,7 @@ export default function Submit() {
           safe_browsing_threats: safety.threats,
           status: "pending_verification",
         })
-        .select(APP_SELECT_COLUMNS)
+        .select("id")
         .single();
 
       if (error) {

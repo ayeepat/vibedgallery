@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     return json({
       safe: false,
       threats: ["API_ERROR"],
-      error: err instanceof Error ? err.message : "Unknown error",
+      error: "URL safety check failed. Please try again.",
     });
   }
 });

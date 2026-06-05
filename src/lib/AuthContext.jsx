@@ -1,5 +1,6 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { sanitizeRedirectPath } from '@/lib/urlHelpers';
 
 const AuthContext = createContext();
 
@@ -10,6 +11,13 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingAuth, setIsLoadingAuth]     = useState(true);
   const [authError, setAuthError]             = useState(null);
   const [authChecked, setAuthChecked]         = useState(false);
+
+  // Tracks which user id we've already loaded a profile for. onAuthStateChange
+  // fires on every TOKEN_REFRESHED (~hourly) and INITIAL_SESSION in addition to
+  // sign-in/out; without this guard we'd refetch the profile on each one and,
+  // worse, a transient fetch error during a token refresh would wipe a good
+  // profile (flipping isAdmin off). We only fetch when the user id changes.
+  const loadedProfileForId = useRef(null);
 
   // Fetch profile from profiles table
   const fetchProfile = async (userId) => {
@@ -35,29 +43,40 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) console.error('Session restore error:', error);
+    let mounted = true;
+
+    const applySession = (session) => {
+      if (!mounted) return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setIsAuthenticated(!!currentUser);
       setAuthChecked(true);
       setIsLoadingAuth(false);
-      if (currentUser) fetchProfile(currentUser.id);
+
+      if (currentUser) {
+        if (loadedProfileForId.current !== currentUser.id) {
+          loadedProfileForId.current = currentUser.id;
+          fetchProfile(currentUser.id);
+        }
+      } else {
+        loadedProfileForId.current = null;
+        setProfile(null);
+      }
+    };
+
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) console.error('Session restore error:', error);
+      applySession(session);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        setIsAuthenticated(!!currentUser);
-        setAuthChecked(true);
-        setIsLoadingAuth(false);
-        if (currentUser) fetchProfile(currentUser.id);
-        else setProfile(null);
-      }
+      (_event, session) => applySession(session)
     );
 
-    return () => subscription?.unsubscribe?.();
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe?.();
+    };
   }, []);
 
   const register = async (email, password, name = '') => {
@@ -114,9 +133,7 @@ export const AuthProvider = ({ children }) => {
   // Site URL.
   const signInWithProvider = async (provider, { redirectPath = '/' } = {}) => {
     setAuthError(null);
-    const safePath = redirectPath.startsWith('/') && !redirectPath.startsWith('//')
-      ? redirectPath
-      : '/';
+    const safePath = sanitizeRedirectPath(redirectPath);
     try {
       sessionStorage.setItem('postAuthRedirect', safePath);
     } catch {

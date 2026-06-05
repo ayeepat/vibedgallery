@@ -29,7 +29,6 @@ export default function Register() {
   const [loading, setLoading]     = useState(false);
   const [resending, setResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [hasResent, setHasResent] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [oauthLoading, setOauthLoading] = useState("");
   const captchaRef = useRef(null);
@@ -151,7 +150,6 @@ export default function Register() {
       await resendOtp(email);
       setMessage("New code sent. Check your email.");
       setResendCooldown(60);
-      setHasResent(true);
     } catch (err) {
       setError(err.message || "Failed to resend. Try again.");
     } finally {

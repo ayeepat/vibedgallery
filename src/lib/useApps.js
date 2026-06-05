@@ -7,6 +7,10 @@ import { supabase } from '@/lib/supabaseClient'
 // used `select('*')`, PostgREST would generate a query referencing every
 // column and PostgreSQL would reject the request with "permission denied".
 // Admins fetch the email separately via the get_app_submitter_email RPC.
+//
+// Full column set — used by the admin queue and by owners viewing their OWN
+// submissions (Profile). It includes review-pipeline internals
+// (verification_token, safe_browsing_*, reviewed_by, rejection_reason, …).
 export const APP_SELECT_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, ' +
@@ -15,6 +19,15 @@ export const APP_SELECT_COLUMNS =
   'status, rejection_reason, reviewed_by, reviewed_at, ' +
   'submitter_twitter, submitter_github, ' +
   'upvotes, views, created_at, updated_at'
+
+// Lean column set for PUBLIC reads (gallery, app detail, maker pages). It
+// returns only what those views render. This (a) shrinks the payload sent to
+// every anonymous visitor and (b) avoids exposing review-pipeline internals
+// (verification_token, safe_browsing_threats, rejection_reason, reviewed_by,
+// status) to anyone who can read an approved row.
+export const APP_PUBLIC_COLUMNS =
+  'id, user_id, title, tagline, description, url, category, tags, ' +
+  'primary_tool, thumbnail_url, ownership_verified, upvotes, created_at'
 
 // Normalize a Supabase apps row to the shape the UI was built for.
 function normalizeApp(row) {
@@ -49,7 +62,7 @@ export function useApprovedApps() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_SELECT_COLUMNS)
+        .select(APP_PUBLIC_COLUMNS)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
       if (error) throw error
@@ -66,7 +79,7 @@ export function useApp(id) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_SELECT_COLUMNS)
+        .select(APP_PUBLIC_COLUMNS)
         .eq('id', id)
         .single()
       if (error) throw error
@@ -83,7 +96,7 @@ export function useApprovedAppsByMaker(userId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_SELECT_COLUMNS)
+        .select(APP_PUBLIC_COLUMNS)
         .eq('status', 'approved')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })

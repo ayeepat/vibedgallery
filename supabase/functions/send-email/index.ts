@@ -131,7 +131,10 @@ Deno.serve(async (req) => {
       .select("id, user_id, title, tagline, url, category, primary_tool, submitter_email")
       .eq("id", appId)
       .maybeSingle<AppRow>();
-    if (appErr) return jsonResp({ error: "App lookup failed", detail: appErr.message }, 500);
+    if (appErr) {
+      console.error("send-email: app lookup failed", appErr.message);
+      return jsonResp({ error: "App lookup failed" }, 500);
+    }
     if (!appRow) return jsonResp({ error: "App not found" }, 404);
 
     // Caller can't pass arbitrary content downstream — every email is built
@@ -224,10 +227,14 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ from: EMAIL_FROM, to: recipient, subject, html: body }),
     });
     const data = await res.json();
-    if (!res.ok) return jsonResp({ error: "Resend error", details: data }, 502);
+    if (!res.ok) {
+      console.error("send-email: Resend error", res.status, data);
+      return jsonResp({ error: "Email provider error" }, 502);
+    }
 
     return jsonResp({ success: true, id: data.id });
   } catch (err) {
-    return jsonResp({ error: String((err as Error)?.message ?? err) }, 500);
+    console.error("send-email: unhandled error", err);
+    return jsonResp({ error: "Internal error" }, 500);
   }
 });
