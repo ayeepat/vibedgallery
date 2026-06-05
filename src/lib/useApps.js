@@ -83,10 +83,15 @@ export function useApprovedApps() {
 }
 
 // Server-paginated gallery listing. `sort` is "Newest" | "Trending" and
-// `category` is either a category string or null for all.
-export function useApprovedAppsInfinite({ sort = 'Newest', category = null } = {}) {
+// `category` is either a category string or null for all. `q` is an optional
+// free-text query matched against title/tagline/category/primary_tool.
+export function useApprovedAppsInfinite({ sort = 'Newest', category = null, q = '' } = {}) {
+  // Strip PostgREST `or()` / SQL-LIKE meta chars so the filter can't break or
+  // be coerced into another column, and bound the length.
+  const term = (q || '').trim().replace(/[,()*:%_\\.]/g, '').slice(0, 80)
+
   return useInfiniteQuery({
-    queryKey: ['apps', 'approved', 'infinite', sort, category || 'all'],
+    queryKey: ['apps', 'approved', 'infinite', sort, category || 'all', term || 'noq'],
     queryFn: async ({ pageParam = 0 }) => {
       const from = pageParam * GALLERY_PAGE_SIZE
       const to = from + GALLERY_PAGE_SIZE - 1
@@ -97,6 +102,18 @@ export function useApprovedAppsInfinite({ sort = 'Newest', category = null } = {
         .eq('status', 'approved')
 
       if (category) query = query.eq('category', category)
+
+      if (term) {
+        const pattern = `%${term}%`
+        query = query.or(
+          [
+            `title.ilike.${pattern}`,
+            `tagline.ilike.${pattern}`,
+            `category.ilike.${pattern}`,
+            `primary_tool.ilike.${pattern}`,
+          ].join(',')
+        )
+      }
 
       if (sort === 'Trending') {
         // Tie-break trending on created_at so order is stable across pages.

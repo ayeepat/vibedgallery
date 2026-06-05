@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Loader2 } from "lucide-react";
 import Nav from "../components/Nav";
@@ -28,16 +28,30 @@ const cardVariants = {
 };
 
 export default function Gallery() {
+  // Free-text query comes from the URL (?q=…) so searches are shareable and the
+  // homepage SearchAction (/gallery?q={term}) resolves to a real filtered view.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const q = searchParams.get("q")?.trim() || "";
+
   usePageMeta({
-    title: "Gallery — Apps built with AI",
+    title: q ? `“${q}” — Gallery` : "Gallery — Apps built with AI",
     description:
       "Browse a curated collection of real apps built with AI coding tools. Filter by category, sort by trending or newest, and discover what people are shipping.",
     path: "/gallery",
+    // Don't let crawlers index the (potentially infinite) ?q= search permutations
+    // — the canonical /gallery already covers the browseable content.
+    noindex: !!q,
   });
 
   const [sort, setSort] = useState("Newest");
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [hoveredId, setHoveredId] = useState(null);
+
+  const clearQuery = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("q");
+    setSearchParams(next, { replace: true });
+  };
 
   const {
     data,
@@ -50,6 +64,7 @@ export default function Gallery() {
   } = useApprovedAppsInfinite({
     sort,
     category: category === ALL_CATEGORIES ? null : category,
+    q,
   });
 
   // Flatten paginated rows. Server returns rows already sorted + filtered.
@@ -60,8 +75,8 @@ export default function Gallery() {
   const total = data?.pages?.[0]?.total ?? null;
 
   // Single key for AnimatePresence so the grid restarts its stagger animation
-  // whenever either dimension changes.
-  const filterKey = `${sort}::${category}`;
+  // whenever any dimension changes.
+  const filterKey = `${sort}::${category}::${q}`;
 
   return (
     <div className="min-h-screen bg-white">
@@ -113,6 +128,18 @@ export default function Gallery() {
           </button>
         )}
 
+        {/* Active search query chip */}
+        {q && (
+          <button
+            onClick={clearQuery}
+            title="Clear search"
+            className="h-full px-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest bg-black text-white border-r border-black hover:bg-[#222] transition-colors max-w-[40vw]"
+          >
+            <span className="truncate">“{q}”</span>
+            <span className="shrink-0">×</span>
+          </button>
+        )}
+
         <div className="ml-auto text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] pr-2">
           {total ?? apps.length} Apps
         </div>
@@ -152,14 +179,24 @@ export default function Gallery() {
               className="mt-3 text-3xl font-black uppercase text-black leading-none"
               style={{ letterSpacing: "-0.03em" }}
             >
-              {category === ALL_CATEGORIES ? "No Apps Yet" : "No Apps Match"}
+              {q || category !== ALL_CATEGORIES ? "No Apps Match" : "No Apps Yet"}
             </h2>
             <p className="mt-4 text-sm text-[#717171] max-w-sm leading-relaxed">
-              {category === ALL_CATEGORIES
-                ? "Be the first to share something you vibed into existence."
-                : "Try a different filter."}
+              {q
+                ? `Nothing matched “${q}”. Try a different search or clear it.`
+                : category !== ALL_CATEGORIES
+                ? "Try a different filter."
+                : "Be the first to share something you vibed into existence."}
             </p>
-            {category === ALL_CATEGORIES && (
+            {q ? (
+              <button
+                onClick={clearQuery}
+                className="mt-8 h-12 px-8 flex items-center gap-3 bg-black text-white hover:bg-[#222] transition-colors"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-widest">Clear Search</span>
+                <span className="text-xs text-[#888]">×</span>
+              </button>
+            ) : category === ALL_CATEGORIES ? (
               <Link
                 to="/submit"
                 className="mt-8 h-12 px-8 flex items-center justify-between gap-6 bg-black text-white hover:bg-[#222] transition-colors"
@@ -167,7 +204,7 @@ export default function Gallery() {
                 <span className="text-[10px] font-bold uppercase tracking-widest">Submit Your App</span>
                 <span className="text-xs text-[#888]">→</span>
               </Link>
-            )}
+            ) : null}
           </div>
         ) : (
         <>

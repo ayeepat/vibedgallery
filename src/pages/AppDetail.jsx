@@ -114,6 +114,11 @@ export default function AppDetail() {
     };
   }, [app, maker]);
 
+  // Don't let search engines index a soft-404 (app missing / RLS-filtered) or
+  // an app that isn't publicly approved — only live gallery entries belong in
+  // the index. While loading we also withhold indexing until the row resolves.
+  const shouldNoindex = isLoading || !!error || !app || app.status !== "approved";
+
   usePageMeta({
     title: app ? `${app.name} — ${app.tagline || app.category}` : "App",
     description: app
@@ -122,7 +127,8 @@ export default function AppDetail() {
     path: `/app/${id || ""}`,
     image: app?.image,
     type: "article",
-    structuredData,
+    noindex: shouldNoindex,
+    structuredData: shouldNoindex ? null : structuredData,
   });
 
   if (isLoading) {
