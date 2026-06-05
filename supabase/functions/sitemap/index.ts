@@ -45,8 +45,14 @@ const STATIC_ROUTES: Array<{
 
 interface AppRow {
   id: string;
+  user_id: string | null;
   updated_at: string | null;
   created_at: string | null;
+}
+
+interface MakerRow {
+  user_id: string;
+  lastmod: string | null;
 }
 
 function isoDate(value: string | null): string | null {
@@ -64,6 +70,25 @@ function escapeXml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+// Derive one MakerRow per distinct creator who has at least one approved app.
+// lastmod is the most recent app updated_at|created_at across that creator's
+// approved apps, so crawlers see "this maker page may have changed."
+function deriveMakers(apps: AppRow[]): MakerRow[] {
+  const byUser = new Map<string, string | null>();
+  for (const app of apps) {
+    if (!app.user_id) continue;
+    const lm = isoDate(app.updated_at) ?? isoDate(app.created_at);
+    const prev = byUser.get(app.user_id);
+    if (prev === undefined || (lm && (!prev || lm > prev))) {
+      byUser.set(app.user_id, lm);
+    }
+  }
+  return Array.from(byUser.entries()).map(([user_id, lastmod]) => ({
+    user_id,
+    lastmod,
+  }));
 }
 
 function buildSitemap(apps: AppRow[]): string {
@@ -90,6 +115,21 @@ function buildSitemap(apps: AppRow[]): string {
     }
     parts.push("    <changefreq>weekly</changefreq>");
     parts.push("    <priority>0.7</priority>");
+    parts.push("  </url>");
+  }
+
+  // Creator/maker pages — one per distinct user_id with at least one approved
+  // app. Lets search engines discover and index portfolios alongside apps.
+  for (const maker of deriveMakers(apps)) {
+    parts.push("  <url>");
+    parts.push(
+      `    <loc>${escapeXml(`${SITE_ORIGIN}/maker/${maker.user_id}`)}</loc>`,
+    );
+    if (maker.lastmod) {
+      parts.push(`    <lastmod>${maker.lastmod}</lastmod>`);
+    }
+    parts.push("    <changefreq>weekly</changefreq>");
+    parts.push("    <priority>0.5</priority>");
     parts.push("  </url>");
   }
 
@@ -139,7 +179,7 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabase
     .from("apps")
-    .select("id, updated_at, created_at")
+    .select("id, user_id, updated_at, created_at")
     .eq("status", "approved")
     .order("updated_at", { ascending: false, nullsFirst: false })
     .limit(MAX_APP_URLS);

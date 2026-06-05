@@ -149,6 +149,7 @@
           <li><strong>Usage and device data:</strong> we collect basic telemetry (page paths, referrer, browser, device type, country-level IP geo) through Vercel Analytics and Vercel Speed Insights. This data is aggregated and used for product analytics and performance monitoring; it is not used for cross-site advertising.</li>
           <li><strong>Security and abuse signals:</strong> we run Cloudflare Turnstile to mitigate bots on signup and sensitive actions. Turnstile may receive your IP address, user-agent, and challenge interactions to score risk.</li>
           <li><strong>Logs:</strong> request logs (IP, timestamp, user-agent, URL, response codes) for diagnostics and security.</li>
+          <li><strong>App view counters (creator analytics):</strong> when you visit an app&rsquo;s detail page we increment that app&rsquo;s view counter and store one row per app per UTC day in an aggregated table. We use your IP address solely to throttle repeat hits from the same source (one view per 30 minutes per app); the IP is held in a short-lived rate-limit table that is automatically cleared after at most 24 hours. We do <em>not</em> store the IP alongside the daily view rows, and the daily rows contain no personal data &mdash; only an app identifier, a date, and a count. Creators can see aggregate views and upvotes for their <em>own</em> approved apps in their profile (enforced by row-level security). Views by the app&rsquo;s own owner and by known bots are excluded.</li>
         </ul>
         <h3>c. Information from third parties</h3>
         <ul>

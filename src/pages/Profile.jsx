@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import AnalyticsPanel from "@/components/AnalyticsPanel";
 import { SubmissionCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 import {
@@ -393,6 +394,7 @@ export default function Profile() {
   const tabs = [
     { id: "account", label: "Account" },
     { id: "submissions", label: "Submissions" },
+    { id: "analytics", label: "Analytics" },
   ];
   const trimmedDisplayName = displayName.trim();
   const nameUnchanged = trimmedDisplayName === (profile?.name || "");
@@ -503,6 +505,19 @@ export default function Profile() {
             ))}
           </div>
         </div>
+
+        {/* Analytics Tab */}
+        {activeTab === "analytics" && (
+          <section className="max-w-5xl mx-auto px-8 py-12">
+            {loadingSubmissions ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-5 h-5 animate-spin text-[#AAAAAA]" />
+              </div>
+            ) : (
+              <AnalyticsPanel submissions={submissions} />
+            )}
+          </section>
+        )}
 
         {/* Submissions Tab */}
         {activeTab === "submissions" && (
