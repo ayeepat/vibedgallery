@@ -22,6 +22,7 @@ import {
   resolveAndAssertPublic,
   SsrfError,
 } from "../_shared/ssrfGuard.ts";
+import { isVerificationTokenSafe } from "../_shared/verifyToken.ts";
 
 interface Payload {
   url?: unknown;
@@ -173,7 +174,7 @@ Deno.serve(async (req) => {
     return json({ verified: false, reason: "url and token are required" }, 400);
   }
   // Bound the token and reject anything that could escape the path segment.
-  if (token.length > 128 || /[/\\?#\s]/.test(token)) {
+  if (!isVerificationTokenSafe(token)) {
     return json({ verified: false, reason: "Invalid token" }, 400);
   }
 

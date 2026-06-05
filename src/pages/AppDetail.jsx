@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { usePageMeta } from "@/lib/usePageMeta";
+import { toggleUpvoteCount, rollbackUpvoteCount, nextUpvoted } from "@/lib/upvote";
 
 // Returns an embeddable src for YouTube/Vimeo/Loom URLs, or null if the URL
 // isn't a recognized provider (in which case we render a plain link).
@@ -417,8 +418,8 @@ function UpvoteButton({ appId, initialCount }) {
 
     // Optimistic update — flip immediately, roll back if the server rejects.
     const wasUpvoted = upvoted;
-    setUpvoted(!wasUpvoted);
-    setCount((c) => (wasUpvoted ? Math.max(c - 1, 0) : c + 1));
+    setUpvoted(nextUpvoted(wasUpvoted));
+    setCount((c) => toggleUpvoteCount(c, wasUpvoted));
     setLoading(true);
 
     try {
@@ -442,7 +443,7 @@ function UpvoteButton({ appId, initialCount }) {
     } catch (err) {
       // Roll back the optimistic update.
       setUpvoted(wasUpvoted);
-      setCount((c) => (wasUpvoted ? c + 1 : Math.max(c - 1, 0)));
+      setCount((c) => rollbackUpvoteCount(c, wasUpvoted));
       console.error("Upvote failed:", err);
     } finally {
       setLoading(false);

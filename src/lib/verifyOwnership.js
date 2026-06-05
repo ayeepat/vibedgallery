@@ -1,59 +1,12 @@
 import { supabase } from '@/lib/supabaseClient'
 
-// Generate a unique verification token
-// 128 bits of entropy via crypto.getRandomValues, base36-encoded.
-// (Math.random was previously used — predictable + only 8 base36 chars.)
-export function generateVerificationToken() {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  // Hex encoding keeps the token URL-safe and filesystem-safe.
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-  return `vg-verify-${hex}`
-}
-
-// Get the verification file instructions
-// Supports both .txt and .html
-export function getVerificationInstructions(siteUrl, token) {
-  const base = siteUrl.replace(/\/$/, '')
-  
-  // Escape HTML entities in token to prevent XSS
-  const escapedToken = token
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-
-  return {
-    token,
-    // Option A: text file
-    txtFile: {
-      filename: `${token}.txt`,
-      url: `${base}/${token}.txt`,
-      content: token,
-      instructions: [
-        `Create a file called ${token}.txt`,
-        `The file content should just be: ${token}`,
-        `Place it in your project's /public folder`,
-        `Deploy your site`,
-        `The file should be accessible at: ${base}/${token}.txt`,
-      ],
-    },
-    // Option B: html file
-    htmlFile: {
-      filename: `${token}.html`,
-      url: `${base}/${token}.html`,
-      content: `<!DOCTYPE html><html><head><meta name="vibedgallery-verification" content="${escapedToken}"></head><body>${escapedToken}</body></html>`,
-      instructions: [
-        `Create a file called ${token}.html`,
-        `Copy the HTML content below into the file`,
-        `Place it in your project's /public folder`,
-        `Deploy your site`,
-        `The file should be accessible at: ${base}/${token}.html`,
-      ],
-    },
-  }
-}
+// Pure token helpers live in verifyTokens.js (no Supabase import) so they can
+// be unit-tested. Re-exported here to keep existing import paths working.
+export {
+  generateVerificationToken,
+  getVerificationInstructions,
+  buildVerificationHtml,
+} from '@/lib/verifyTokens'
 
 // Check if the verification file exists
 // Tries both .txt and .html

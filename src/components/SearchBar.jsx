@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function SearchBar() {
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q") ?? "";
+  const [query, setQuery] = useState(() => urlQuery);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -12,6 +14,17 @@ export default function SearchBar() {
   const wrapperRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  // Distinguishes a value the user typed (→ live typeahead + dropdown) from one
+  // mirrored in from the URL ?q= (→ just populate the box, no dropdown/fetch).
+  const userTypedRef = useRef(false);
+
+  // Keep the box in sync with the gallery's ?q= so a shared /gallery?q=… link,
+  // or clearing the gallery search chip, is reflected here without opening the
+  // dropdown.
+  useEffect(() => {
+    userTypedRef.current = false;
+    setQuery(urlQuery);
+  }, [urlQuery]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -47,6 +60,10 @@ export default function SearchBar() {
       setOpen(false);
       return;
     }
+
+    // A value mirrored in from the URL just populates the box — don't fire the
+    // typeahead or pop the dropdown open on page load.
+    if (!userTypedRef.current) return;
 
     // Clear previous timer
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -137,9 +154,14 @@ export default function SearchBar() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlighted((h) => (h > 0 ? h - 1 : results.length - 1));
-    } else if (e.key === "Enter" && highlighted >= 0) {
+    } else if (e.key === "Enter") {
       e.preventDefault();
-      goToApp(results[highlighted]);
+      if (highlighted >= 0) {
+        goToApp(results[highlighted]);
+      } else if (query.trim()) {
+        // No item highlighted → search the whole gallery for the typed term.
+        runGallerySearch(query.trim());
+      }
     }
   };
 
@@ -147,6 +169,16 @@ export default function SearchBar() {
     setQuery("");
     setOpen(false);
     navigate(`/app/${app.id}`);
+  };
+
+  // Run a full gallery search for the term (the /gallery?q= filter), instead of
+  // jumping to one app. Makes the typeahead a real search box.
+  const runGallerySearch = (term) => {
+    const t = term.trim();
+    if (!t) return;
+    setOpen(false);
+    inputRef.current?.blur();
+    navigate(`/gallery?q=${encodeURIComponent(t)}`);
   };
 
   // Highlight matching text
@@ -175,7 +207,7 @@ export default function SearchBar() {
           ref={inputRef}
           type="text"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => { userTypedRef.current = true; setQuery(e.target.value); }}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
           onKeyDown={handleKeyDown}
           placeholder="Search artifacts..."
@@ -246,10 +278,19 @@ export default function SearchBar() {
             </button>
           ))}
 
+          {/* Search the whole gallery for this term */}
+          <button
+            onClick={() => runGallerySearch(query)}
+            className="w-full text-left px-4 py-3 border-t border-[#E5E5E5] bg-white hover:bg-[#F5F5F5] transition-colors text-[10px] font-bold uppercase tracking-widest text-black flex items-center justify-between"
+          >
+            <span className="truncate">Search gallery for “{query.trim()}”</span>
+            <span className="shrink-0 text-[#717171]">→</span>
+          </button>
+
           {/* Footer */}
           <div className="px-4 py-2 bg-[#F5F5F5]">
             <span className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              {results.length} result{results.length !== 1 ? "s" : ""} · ↑↓ Navigate · Enter to select
+              {results.length} result{results.length !== 1 ? "s" : ""} · ↑↓ Navigate · Enter to search
             </span>
           </div>
         </div>
@@ -263,6 +304,13 @@ export default function SearchBar() {
               No apps found for "{query}"
             </p>
           </div>
+          <button
+            onClick={() => runGallerySearch(query)}
+            className="w-full text-left px-4 py-3 border-t border-[#E5E5E5] bg-white hover:bg-[#F5F5F5] transition-colors text-[10px] font-bold uppercase tracking-widest text-black flex items-center justify-between"
+          >
+            <span className="truncate">Search gallery for “{query.trim()}”</span>
+            <span className="shrink-0 text-[#717171]">→</span>
+          </button>
         </div>
       )}
 

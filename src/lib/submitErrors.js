@@ -1,0 +1,15 @@
+// Pure mapping of raw submit/insert errors to clean, user-facing copy. Kept
+// dependency-free so it can be unit-tested in isolation.
+//
+// The key rule: never echo the server-side rate-limit policy text (e.g.
+// "rate limit: 5 per hour") back to the user — that leaks internal config.
+
+const GENERIC = "Something went wrong. Please try again.";
+const RATE_LIMITED =
+  "You're submitting too quickly. Please wait a few minutes and try again.";
+
+export function formatSubmitError(rawMessage) {
+  const raw = typeof rawMessage === "string" ? rawMessage : "";
+  if (/rate limit/i.test(raw)) return RATE_LIMITED;
+  return raw || GENERIC;
+}

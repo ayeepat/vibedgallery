@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
+import { sanitizeSearchTerm } from '@/lib/urlHelpers'
 
 // Page size for the gallery's server-paginated listings.
 export const GALLERY_PAGE_SIZE = 24
@@ -88,7 +89,7 @@ export function useApprovedApps() {
 export function useApprovedAppsInfinite({ sort = 'Newest', category = null, q = '' } = {}) {
   // Strip PostgREST `or()` / SQL-LIKE meta chars so the filter can't break or
   // be coerced into another column, and bound the length.
-  const term = (q || '').trim().replace(/[,()*:%_\\.]/g, '').slice(0, 80)
+  const term = sanitizeSearchTerm(q)
 
   return useInfiniteQuery({
     queryKey: ['apps', 'approved', 'infinite', sort, category || 'all', term || 'noq'],

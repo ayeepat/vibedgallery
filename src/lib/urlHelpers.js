@@ -13,6 +13,18 @@ export function normalizeUrl(input) {
   return url;
 }
 
+// Sanitize a free-text search term before it's interpolated into a PostgREST
+// `or()` / `ilike` filter. Strips the meta chars that break or could be coerced
+// across that syntax — commas, parens, colons, asterisks, SQL LIKE wildcards
+// (% _ \) and the `.` field separator — then bounds the length. Returns a
+// string safe to wrap in `%term%`.
+export function sanitizeSearchTerm(input, maxLength = 80) {
+  return String(input ?? "")
+    .trim()
+    .replace(/[,()*:%_\\.]/g, "")
+    .slice(0, maxLength);
+}
+
 // Validate a post-auth / post-action redirect target so an attacker can't use a
 // `?from=` / stashed path to bounce the user to another origin (open redirect).
 // Only same-origin absolute paths are allowed; everything else falls back.

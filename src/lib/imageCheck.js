@@ -1,31 +1,24 @@
 import { supabase } from '@/lib/supabaseClient'
+import { validateImageConstraints } from '@/lib/imageConstraints'
 
-// Basic image safety checks
+// Basic image safety checks. The pure type/size/dimension rules live in
+// imageConstraints.js (unit-tested); this wrapper measures dimensions in the
+// browser and feeds them in.
 export async function checkImageSafety(file) {
-  const errors = []
-
-  // Check file type
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-  if (!allowedTypes.includes(file.type)) {
-    errors.push('File must be JPG, PNG, WebP or GIF')
-  }
-
-  // Check file size (max 5MB)
-  const maxSize = 5 * 1024 * 1024
-  if (file.size > maxSize) {
-    errors.push('File must be under 5MB')
-  }
-
-  // Check dimensions
-  if (file.type.startsWith('image/')) {
+  let width
+  let height
+  if (file.type?.startsWith('image/')) {
     const dimensions = await getImageDimensions(file)
-    if (dimensions.width < 200 || dimensions.height < 100) {
-      errors.push('Image must be at least 200x100 pixels')
-    }
-    if (dimensions.width > 6000 || dimensions.height > 6000) {
-      errors.push('Image is too large. Max 6000x6000 pixels')
-    }
+    width = dimensions.width
+    height = dimensions.height
   }
+
+  const errors = validateImageConstraints({
+    type: file.type,
+    size: file.size,
+    width,
+    height,
+  })
 
   return {
     safe: errors.length === 0,

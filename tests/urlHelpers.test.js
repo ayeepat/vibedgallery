@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { normalizeUrl, sanitizeRedirectPath } from "../src/lib/urlHelpers.js";
+import {
+  normalizeUrl,
+  sanitizeRedirectPath,
+  sanitizeSearchTerm,
+} from "../src/lib/urlHelpers.js";
 
 const NL = String.fromCharCode(10); // newline
 const TAB = String.fromCharCode(9); // tab
@@ -45,4 +49,28 @@ test("sanitizeRedirectPath rejects empty / non-string / control chars", () => {
 
 test("sanitizeRedirectPath honors a custom fallback", () => {
   assert.equal(sanitizeRedirectPath("//evil.com", "/home"), "/home");
+});
+
+test("sanitizeSearchTerm strips PostgREST/LIKE meta chars and the field separator", () => {
+  // Commas, parens, colons, asterisks, % _ \ and `.` must all be removed so the
+  // term can't break out of the `or(col.ilike.%term%)` filter.
+  assert.equal(sanitizeSearchTerm("title.ilike.*,admin"), "titleilikeadmin");
+  assert.equal(sanitizeSearchTerm("a%b_c\\d"), "abcd");
+  assert.equal(sanitizeSearchTerm("(foo):bar"), "foobar");
+});
+
+test("sanitizeSearchTerm trims and keeps ordinary words", () => {
+  assert.equal(sanitizeSearchTerm("  crm tool  "), "crm tool");
+  assert.equal(sanitizeSearchTerm("Productivity"), "Productivity");
+});
+
+test("sanitizeSearchTerm bounds the length", () => {
+  assert.equal(sanitizeSearchTerm("x".repeat(200)).length, 80);
+  assert.equal(sanitizeSearchTerm("x".repeat(200), 10).length, 10);
+});
+
+test("sanitizeSearchTerm handles empty / non-string input", () => {
+  assert.equal(sanitizeSearchTerm(""), "");
+  assert.equal(sanitizeSearchTerm(null), "");
+  assert.equal(sanitizeSearchTerm(undefined), "");
 });

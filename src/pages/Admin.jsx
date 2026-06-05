@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
 import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
+import { sanitizeSearchTerm } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
 import { Loader2, Check, X, ExternalLink, Search, ShieldCheck } from "lucide-react";
 
@@ -113,10 +114,9 @@ export default function Admin() {
 
   const fetchApps = async () => {
     setLoading(true)
-    // Strip PostgREST/SQL-LIKE meta chars and the `.` field separator so the
-    // `.or()` filter can't be coerced into selecting a different column.
-    // Also cap length so a pathological input can't generate a multi-KB URL.
-    const term = search.trim().replace(/[,()*:%_\\.]/g, "").slice(0, 80)
+    // Strip PostgREST/SQL-LIKE meta chars + cap length so the `.or()` filter
+    // can't be coerced into another column or generate a multi-KB URL.
+    const term = sanitizeSearchTerm(search)
 
     let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
 

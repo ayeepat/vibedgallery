@@ -12,6 +12,7 @@ import Nav from "@/components/Nav";
 import Turnstile from "@/components/Turnstile";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { toast } from "@/components/ui/use-toast";
+import { formatSubmitError } from "@/lib/submitErrors";
 
 const CATEGORIES = [
   "Productivity", "Creative", "Developer Tool", "Game",
@@ -478,14 +479,9 @@ export default function Submit() {
 
     } catch (err) {
       console.error("Submission failed:", err);
-      const raw = err?.message || "";
-      // Map the server-side rate-limit exception to a clean, generic line —
-      // never echo the raw "5 per hour" policy text back to the user.
-      if (/rate limit/i.test(raw)) {
-        setGlobalError("You're submitting too quickly. Please wait a few minutes and try again.");
-      } else {
-        setGlobalError(raw || "Something went wrong. Please try again.");
-      }
+      // formatSubmitError maps the server-side rate-limit exception to a clean,
+      // generic line — never echoes the raw "5 per hour" policy text.
+      setGlobalError(formatSubmitError(err?.message));
       captchaRef.current?.reset();
       setCaptchaToken("");
     } finally {
