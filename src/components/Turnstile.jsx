@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from "react";
 
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
+// Sentinel emitted when no site key is configured. It is NOT a bypass: the
+// server (verify-turnstile) only skips verification when its own
+// TURNSTILE_SECRET_KEY is also unset. If the secret IS configured, the server
+// hands this string to Cloudflare, which rejects it — so an unset/forgotten
+// client key can never bypass a captcha the operator actually enabled.
+export const UNCONFIGURED_CAPTCHA_TOKEN = "unconfigured-captcha";
+
 // Minimal wrapper around Cloudflare Turnstile.
 //   - Loads the widget (Cloudflare's script is in index.html).
 //   - Calls `onVerify(token)` when the user completes the challenge.
@@ -9,8 +16,10 @@ const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 //   - Calls `onError()` if the widget itself errors.
 //   - Exposes a `reset()` method via the optional `innerRef` prop.
 //
-// If `VITE_TURNSTILE_SITE_KEY` is unset, renders a small inline note and
-// auto-issues a "DEV_BYPASS" token so local dev isn't blocked.
+// If `VITE_TURNSTILE_SITE_KEY` is unset, the widget can't render, so we emit
+// the sentinel token (so the form isn't dead) and let the server decide whether
+// to enforce — matching how check-image-safety / check-url-safety skip when
+// their key is unconfigured.
 export default function Turnstile({
   onVerify,
   onExpire,
@@ -24,11 +33,11 @@ export default function Turnstile({
   const widgetIdRef = useRef(null);
   const [ready, setReady] = useState(false);
 
-  // Local-dev escape hatch: no site key = auto-pass with a sentinel token.
-  // Gated on import.meta.env.DEV so a production build never silently emits
-  // the bypass token even if VITE_TURNSTILE_SITE_KEY is accidentally unset.
+  // No site key configured → emit the sentinel so the form isn't dead. Safe in
+  // prod because the server only skips when ITS secret is also unset (see the
+  // UNCONFIGURED_CAPTCHA_TOKEN note above).
   useEffect(() => {
-    if (import.meta.env.DEV && !SITE_KEY && onVerify) onVerify("DEV_BYPASS");
+    if (!SITE_KEY && onVerify) onVerify(UNCONFIGURED_CAPTCHA_TOKEN);
   }, [onVerify]);
 
   // Wait for Cloudflare's script to define window.turnstile, then mount.
@@ -87,21 +96,16 @@ export default function Turnstile({
   }, [innerRef, ready]);
 
   if (!SITE_KEY) {
-    if (!import.meta.env.DEV) {
-      // Misconfigured prod build — refuse to render anything that could be
-      // mistaken for a passed captcha. The submit form will keep its CTA
-      // disabled because onVerify never fires.
+    // Captcha not configured. The sentinel token has already been emitted; the
+    // server decides enforcement. Show a quiet note in dev, nothing in prod.
+    if (import.meta.env.DEV) {
       return (
-        <p className={`text-[9px] font-bold uppercase tracking-widest text-red-600 ${className}`}>
-          Captcha unavailable — please refresh or contact support.
+        <p className={`text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] ${className}`}>
+          Captcha disabled (no site key set) — dev mode
         </p>
       );
     }
-    return (
-      <p className={`text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] ${className}`}>
-        Captcha disabled (no site key set) — dev mode
-      </p>
-    );
+    return null;
   }
 
   return <div ref={containerRef} className={className} />;

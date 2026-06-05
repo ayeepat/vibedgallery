@@ -69,27 +69,29 @@ function downloadVerificationFile(token) {
   ${token}
 </body>
 </html>`;
-  const blob = new Blob([html], { type: "text/html" });
+  // octet-stream so browsers treat it as a download rather than navigating to /
+  // rendering the HTML (Safari in particular). The verification step also shows
+  // the file contents on-screen, so a failed download is never a dead end.
+  const blob = new Blob([html], { type: "application/octet-stream" });
   const url = URL.createObjectURL(blob);
 
-  // iOS Safari (and Safari private mode) ignores the `download` attribute and
-  // blocks programmatic Blob downloads. Detect Safari and fall back to opening
-  // the file in a new tab so the user can long-press → Save.
-  const ua = navigator.userAgent;
-  const isSafari = /^((?!chrome|android|crios|fxios).)*safari/i.test(ua);
-  if (isSafari) {
-    window.open(url, "_blank", "noopener,noreferrer");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    return;
+  try {
+    const a = document.createElement("a");
+    if (typeof a.download === "undefined") {
+      // Ancient browser without the download attribute — last-resort new tab.
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      a.href = url;
+      a.download = `${token}.html`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  } finally {
+    // Revoke after a tick so the download/navigation has a chance to start.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${token}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 // ─── Drag & Drop Upload ────────────────────────────────────────
@@ -985,7 +987,9 @@ export default function Submit() {
                 onError={() => setCaptchaToken("")}
               />
             </div>
-            <button type="submit" disabled={loading || !captchaToken}
+            {/* Kept clickable; the captcha is validated on submit (handleSubmit
+                sets a clear error if it's missing) so the button is never dead. */}
+            <button type="submit" disabled={loading}
               className="w-full h-16 flex items-center justify-between px-8 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <span className="text-[10px] font-bold uppercase tracking-widest">
                 {loading ? "Submitting..." : "Submit App for Review"}

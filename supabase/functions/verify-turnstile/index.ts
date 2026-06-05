@@ -34,12 +34,15 @@ Deno.serve(async (req) => {
     return json({ success: false, error: "Method not allowed" }, 405);
   }
 
+  // No secret configured → captcha isn't enabled on this deployment. Skip
+  // rather than hard-fail, mirroring check-image-safety / check-url-safety, so
+  // an unconfigured deployment still lets users register/submit. Set the secret
+  // to turn enforcement on.
   if (!SECRET) {
-    console.error("verify-turnstile: TURNSTILE_SECRET_KEY not set");
-    return json(
-      { success: false, error: "Captcha not configured on server" },
-      500
+    console.warn(
+      "verify-turnstile: TURNSTILE_SECRET_KEY not set — skipping (captcha not configured)",
     );
+    return json({ success: true, skipped: true });
   }
 
   let payload: Payload;

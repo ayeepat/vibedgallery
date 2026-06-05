@@ -68,17 +68,12 @@ export async function checkImageSafetyRemote(url) {
 export async function verifyTurnstile(token, action) {
   if (!token) return { success: false, error: 'Missing captcha token' }
 
-  // Dev-mode bypass — must mirror the sentinel in src/components/Turnstile.jsx.
-  // Only honored in a Vite dev build AND when no site key is configured.
-  // In production bundles `import.meta.env.DEV` is statically false, so even
-  // if VITE_TURNSTILE_SITE_KEY is accidentally unset, an attacker submitting
-  // the literal "DEV_BYPASS" string will fall through to the real server-side
-  // Turnstile check (which will reject it).
-  if (
-    import.meta.env.DEV &&
-    token === 'DEV_BYPASS' &&
-    !import.meta.env.VITE_TURNSTILE_SITE_KEY
-  ) {
+  // Local-dev convenience: with no site key there's no captcha to verify and the
+  // edge function may not be running locally, so short-circuit. This is gated on
+  // `import.meta.env.DEV` (statically false in prod builds), so production ALWAYS
+  // calls the server — which is the real gate and only skips when its own secret
+  // is unset. A forgotten client key therefore can't bypass a configured captcha.
+  if (import.meta.env.DEV && !import.meta.env.VITE_TURNSTILE_SITE_KEY) {
     return { success: true, dev: true }
   }
 

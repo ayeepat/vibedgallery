@@ -477,10 +477,11 @@ export default function Register() {
               />
             </div>
 
-            {/* Submit */}
+            {/* Submit — kept clickable; the captcha is validated on submit
+                (see handleRegister) so the button is never a dead end. */}
             <button
               type="submit"
-              disabled={loading || !captchaToken}
+              disabled={loading}
               className="h-14 flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="text-[10px] font-bold uppercase tracking-widest">
