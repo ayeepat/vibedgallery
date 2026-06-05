@@ -318,7 +318,7 @@ export default function Register() {
               A gallery for apps built with AI
             </p>
             <h1
-              className="text-[clamp(3rem,6.5vw,6rem)] font-black uppercase leading-[0.9] text-black"
+              className="text-[clamp(2.5rem,4vw,4.5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
             >
               CREATE AN<br />ACCOUNT.

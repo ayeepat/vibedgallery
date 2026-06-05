@@ -72,26 +72,18 @@ export default function AppDetail() {
   const { id } = useParams();
   const { data: app, isLoading, error } = useApp(id);
   const { data: maker } = useMaker(app?.user_id);
-  const { user } = useAuth();
 
   // Bump the views counter once per session. Fire-and-forget — failures
   // here don't matter for rendering the page.
-  //
-  // Skip cases (keeps creator analytics honest):
-  //   - The owner viewing their own app (would inflate their stats).
-  //   - Headless bots (Googlebot, Lighthouse, etc) — they don't run JS most
-  //     of the time, but the ones that do shouldn't count as human traffic.
   useEffect(() => {
     if (!app?.id) return;
-    if (user?.id && app.user_id && user.id === app.user_id) return;
-    if (typeof navigator !== "undefined" && /bot|crawl|spider|lighthouse|preview/i.test(navigator.userAgent || "")) return;
     if (!markViewedThisSession(app.id)) return;
     supabase
       .rpc("increment_app_views", { target_app_id: app.id })
       .then(({ error: rpcError }) => {
         if (rpcError) console.warn("view counter failed:", rpcError.message);
       });
-  }, [app?.id, app?.user_id, user?.id]);
+  }, [app?.id]);
 
   // Per-app meta. usePageMeta safely handles undefined values — it falls back
   // to defaults until the app row resolves.

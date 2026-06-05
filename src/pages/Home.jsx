@@ -49,88 +49,8 @@ export default function Home() {
     <div className="min-h-screen bg-white">
       <Nav hideSearch />
 
-      {/* Mobile Hero — sophisticated centered layout */}
-      <section className="md:hidden flex flex-col border-b border-[#E5E5E5] pt-14">
-        <div className="px-6 pt-10 pb-8 flex flex-col">
-          <motion.p
-            initial="hidden"
-            animate="visible"
-            custom={0}
-            variants={heroLineVariants}
-            className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-5"
-          >
-            A gallery for apps built with AI
-          </motion.p>
-          <h1
-            className="text-[clamp(2.75rem,12vw,4.5rem)] font-black uppercase leading-[0.9] text-black"
-            style={{ letterSpacing: "-0.04em" }}
-          >
-            {["SEE WHAT", "PEOPLE", "ARE BUILDING."].map((line, i) => (
-              <motion.span
-                key={line}
-                custom={i + 1}
-                variants={heroLineVariants}
-                initial="hidden"
-                animate="visible"
-                className="block"
-              >
-                {line}
-              </motion.span>
-            ))}
-          </h1>
-          <motion.p
-            initial="hidden"
-            animate="visible"
-            custom={4}
-            variants={heroLineVariants}
-            className="mt-6 text-sm text-[#717171] max-w-sm leading-relaxed"
-          >
-            VibedGallery is a public gallery of real apps built with AI coding
-            tools. Browse what people are building, try the apps live, and
-            submit your own.
-          </motion.p>
-        </div>
-
-        {/* Mobile marquee — horizontal strip */}
-        <div className="border-y border-[#E5E5E5] overflow-hidden bg-white">
-          <div className="animate-marquee-left flex whitespace-nowrap py-4">
-            {doubled.map((name, i) => (
-              <span
-                key={i}
-                className="text-[2.25rem] font-black uppercase leading-none px-5"
-                style={{
-                  WebkitTextStroke: i % 3 === 0 ? "1.5px #000" : "0px",
-                  color: i % 3 === 0 ? "transparent" : "#000",
-                  letterSpacing: "-0.04em",
-                }}
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Mobile CTAs — full-width stacked */}
-        <div className="flex flex-col">
-          <Link
-            to="/gallery"
-            className="h-16 flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-white"
-          >
-            <span className="text-xs font-bold uppercase tracking-widest">Browse the Gallery</span>
-            <span className="text-sm text-[#888] group-hover:text-[#bbb] transition-colors">→</span>
-          </Link>
-          <Link
-            to="/submit"
-            className="h-16 flex items-center justify-between px-6 bg-white text-black border-t border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-black"
-          >
-            <span className="text-xs font-bold uppercase tracking-widest">Submit Your App</span>
-            <span className="text-sm text-[#717171] group-hover:text-black transition-colors">→</span>
-          </Link>
-        </div>
-      </section>
-
-      {/* Desktop Hero */}
-      <section className="hidden md:flex h-screen border-b border-[#E5E5E5] pt-14">
+      {/* Hero */}
+      <section className="h-screen flex border-b border-[#E5E5E5] pt-14">
         {/* Left 60% — Static hero */}
         <div className="w-[60%] border-r border-[#E5E5E5] flex flex-col justify-between p-12">
           <div className="flex-1 flex flex-col justify-center overflow-hidden">
@@ -144,7 +64,7 @@ export default function Home() {
               A gallery for apps built with AI
             </motion.p>
             <h1
-              className="text-[clamp(3rem,6.5vw,6rem)] font-black uppercase leading-[0.9] text-black"
+              className="text-[clamp(2.5rem,5vw,5rem)] font-black uppercase leading-[0.9] text-black"
               style={{ letterSpacing: "-0.04em" }}
             >
               {["SEE WHAT", "PEOPLE", "ARE BUILDING."].map((line, i) => (
