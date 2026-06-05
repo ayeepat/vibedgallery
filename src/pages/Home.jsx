@@ -83,7 +83,7 @@ export default function Home() {
             animate="visible"
             custom={4}
             variants={heroLineVariants}
-            className="mt-5 text-[13px] text-[#717171] leading-relaxed"
+            className="mt-6 text-sm text-[#717171] max-w-sm leading-relaxed"
           >
             VibedGallery is a public gallery of real apps built with AI coding
             tools. Browse what people are building, try the apps live, and
