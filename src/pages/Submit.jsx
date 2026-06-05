@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
-import { checkImageSafety, uploadImage } from "@/lib/imageCheck";
-import { sendEmail, verifyTurnstile } from "@/lib/edgeFunctions";
+import { checkImageSafety, uploadImage, deleteImage } from "@/lib/imageCheck";
+import { sendEmail, verifyTurnstile, checkImageSafetyRemote } from "@/lib/edgeFunctions";
 import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { normalizeUrl } from "@/lib/urlHelpers";
 import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
@@ -357,16 +357,55 @@ export default function Submit() {
         return;
       }
 
-      // Upload thumbnail
+      // Upload thumbnail and run it through server-side SafeSearch. The
+      // client-side checkImageSafety() only validates MIME + dimensions and
+      // is trivially bypassable by anyone hitting the storage API directly,
+      // so we re-check on the trusted side after the file is in the bucket.
+      // If it's flagged we delete the upload before bailing.
       setUploadProgress("uploading_thumbnail");
-      const thumbnailUrl = await uploadImage(thumbnail, user.id, "thumbnails");
+      const thumb = await uploadImage(thumbnail, user.id, "thumbnails");
+      const uploadedPaths = [thumb.storagePath];
 
-      // Upload screenshots
+      setUploadProgress("moderating_thumbnail");
+      const thumbModeration = await checkImageSafetyRemote(thumb.publicUrl);
+      if (!thumbModeration.safe) {
+        await Promise.all(uploadedPaths.map(deleteImage));
+        const reason = thumbModeration.error
+          || (thumbModeration.threats?.length
+            ? `Thumbnail flagged: ${thumbModeration.threats.join(", ")}.`
+            : "Thumbnail rejected by image safety check.");
+        setGlobalError(reason);
+        captchaRef.current?.reset();
+        setCaptchaToken("");
+        setLoading(false);
+        return;
+      }
+      const thumbnailUrl = thumb.publicUrl;
+
+      // Upload screenshots. Each one goes through the same moderation gate;
+      // a flagged screenshot kills the whole submission and removes every
+      // upload from this attempt.
       const screenshotUrls = [];
       for (let i = 0; i < screenshots.length; i++) {
         setUploadProgress(`uploading_screenshot_${i + 1}/${screenshots.length}`);
-        const url = await uploadImage(screenshots[i].file, user.id, "screenshots");
-        screenshotUrls.push(url);
+        const shot = await uploadImage(screenshots[i].file, user.id, "screenshots");
+        uploadedPaths.push(shot.storagePath);
+
+        setUploadProgress(`moderating_screenshot_${i + 1}/${screenshots.length}`);
+        const shotModeration = await checkImageSafetyRemote(shot.publicUrl);
+        if (!shotModeration.safe) {
+          await Promise.all(uploadedPaths.map(deleteImage));
+          const reason = shotModeration.error
+            || (shotModeration.threats?.length
+              ? `Screenshot ${i + 1} flagged: ${shotModeration.threats.join(", ")}.`
+              : `Screenshot ${i + 1} rejected by image safety check.`);
+          setGlobalError(reason);
+          captchaRef.current?.reset();
+          setCaptchaToken("");
+          setLoading(false);
+          return;
+        }
+        screenshotUrls.push(shot.publicUrl);
       }
 
       setUploadProgress("inserting_database");
@@ -907,7 +946,9 @@ export default function Submit() {
               <div className="px-8 py-4 bg-[#F5F5F5] border-b border-[#E5E5E5]">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
                   {uploadProgress === "uploading_thumbnail" && "Uploading thumbnail..."}
-                  {uploadProgress.includes("uploading_screenshot") && `${uploadProgress}`}
+                  {uploadProgress === "moderating_thumbnail" && "Checking thumbnail..."}
+                  {uploadProgress.startsWith("uploading_screenshot") && `Uploading ${uploadProgress.replace("uploading_screenshot_", "screenshot ")}`}
+                  {uploadProgress.startsWith("moderating_screenshot") && `Checking ${uploadProgress.replace("moderating_screenshot_", "screenshot ")}`}
                   {uploadProgress === "inserting_database" && "Finalizing submission..."}
                 </p>
                 <div className="w-full h-1 bg-[#E5E5E5]">

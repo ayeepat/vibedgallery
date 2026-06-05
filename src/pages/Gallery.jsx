@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import Nav from "../components/Nav";
 import Footer from "@/components/Footer";
-import { useApprovedApps } from "@/lib/useApps";
+import { useApprovedAppsInfinite } from "@/lib/useApps";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 
@@ -39,20 +39,23 @@ export default function Gallery() {
   const [category, setCategory] = useState(ALL_CATEGORIES);
   const [hoveredId, setHoveredId] = useState(null);
 
-  const { data: apps = [], isLoading } = useApprovedApps();
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useApprovedAppsInfinite({
+    sort,
+    category: category === ALL_CATEGORIES ? null : category,
+  });
 
-  const filtered = useMemo(() => {
-    let list =
-      category === ALL_CATEGORIES
-        ? [...apps]
-        : apps.filter((a) => (a.category || "").toLowerCase() === category.toLowerCase());
-
-    if (sort === "Trending") list.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
-    if (sort === "Newest") {
-      list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    }
-    return list;
-  }, [sort, category, apps]);
+  // Flatten paginated rows. Server returns rows already sorted + filtered.
+  const apps = useMemo(
+    () => (data?.pages || []).flatMap((p) => p.rows),
+    [data]
+  );
+  const total = data?.pages?.[0]?.total ?? null;
 
   // Single key for AnimatePresence so the grid restarts its stagger animation
   // whenever either dimension changes.
@@ -109,7 +112,7 @@ export default function Gallery() {
         )}
 
         <div className="ml-auto text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] pr-2">
-          {filtered.length} Apps
+          {total ?? apps.length} Apps
         </div>
       </div>
 
@@ -121,21 +124,21 @@ export default function Gallery() {
               <GalleryCardSkeleton key={i} />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : apps.length === 0 ? (
           <div className="border border-[#E5E5E5] px-10 py-16 flex flex-col items-center text-center max-w-2xl mx-auto">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">Empty</p>
             <h2
               className="mt-3 text-3xl font-black uppercase text-black leading-none"
               style={{ letterSpacing: "-0.03em" }}
             >
-              {apps.length === 0 ? "No Apps Yet" : "No Apps Match"}
+              {category === ALL_CATEGORIES ? "No Apps Yet" : "No Apps Match"}
             </h2>
             <p className="mt-4 text-sm text-[#717171] max-w-sm leading-relaxed">
-              {apps.length === 0
+              {category === ALL_CATEGORIES
                 ? "Be the first to share something you vibed into existence."
                 : "Try a different filter."}
             </p>
-            {apps.length === 0 && (
+            {category === ALL_CATEGORIES && (
               <Link
                 to="/submit"
                 className="mt-8 h-12 px-8 flex items-center justify-between gap-6 bg-black text-white hover:bg-[#222] transition-colors"
@@ -146,12 +149,13 @@ export default function Gallery() {
             )}
           </div>
         ) : (
+        <>
         <AnimatePresence mode="wait">
           <motion.div
             key={filterKey}
             className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8"
           >
-            {filtered.map((app, i) => (
+            {apps.map((app, i) => (
               <motion.div
                 key={app.id}
                 custom={i}
@@ -216,6 +220,26 @@ export default function Gallery() {
             ))}
           </motion.div>
         </AnimatePresence>
+
+        {hasNextPage && (
+          <div className="mt-12 flex justify-center">
+            <button
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              className="h-12 px-8 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+            >
+              {isFetchingNextPage ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>Load More →</>
+              )}
+            </button>
+          </div>
+        )}
+        </>
         )}
       </div>
 

@@ -1,43 +1,87 @@
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from "react-router-dom";
+import Nav from "@/components/Nav";
+import Footer from "@/components/Footer";
+import { usePageMeta } from "@/lib/usePageMeta";
 
 export default function PageNotFound() {
-    const location = useLocation();
-    const pageName = location.pathname.substring(1);
-    
-    return (
-        <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-            <div className="max-w-md w-full">
-                <div className="text-center space-y-6">
-                    {/* 404 Error Code */}
-                    <div className="space-y-2">
-                        <h1 className="text-7xl font-light text-slate-300">404</h1>
-                        <div className="h-0.5 w-16 bg-slate-200 mx-auto"></div>
-                    </div>
-                    
-                    {/* Main Message */}
-                    <div className="space-y-3">
-                        <h2 className="text-2xl font-medium text-slate-800">
-                            Page Not Found
-                        </h2>
-                        <p className="text-slate-600 leading-relaxed">
-                            The page <span className="font-medium text-slate-700">"{pageName}"</span> could not be found in this application.
-                        </p>
-                    </div>
-                    
-                    {/* Action Button */}
-                    <div className="pt-6">
-                        <button 
-                            onClick={() => window.location.href = '/'} 
-                            className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
-                        >
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                            </svg>
-                            Go Home
-                        </button>
-                    </div>
-                </div>
+  const location = useLocation();
+  const path = location.pathname || "/";
+
+  usePageMeta({
+    title: "Page Not Found",
+    description: "The page you're looking for isn't here.",
+    path,
+    noindex: true,
+  });
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      <Nav hideSearch />
+
+      <main className="flex-1 pt-14 flex flex-col">
+        <div className="flex-1 flex items-center px-6 sm:px-10 py-16">
+          <div className="w-full max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 border border-[#E5E5E5]">
+            {/* Left — big 404 */}
+            <div className="p-8 sm:p-12 md:border-r border-b md:border-b-0 border-[#E5E5E5] flex flex-col justify-between gap-10">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+                Error 404
+              </p>
+              <h1
+                className="text-[clamp(5rem,18vw,12rem)] font-black uppercase text-black leading-none"
+                style={{ letterSpacing: "-0.06em" }}
+              >
+                404
+              </h1>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                Page not found.
+              </p>
             </div>
+
+            {/* Right — message + actions */}
+            <div className="p-8 sm:p-12 flex flex-col justify-between gap-10">
+              <div>
+                <h2
+                  className="text-3xl sm:text-4xl font-black uppercase text-black leading-none"
+                  style={{ letterSpacing: "-0.04em" }}
+                >
+                  NOTHING<br />HERE.
+                </h2>
+                <p className="mt-4 text-sm text-[#717171] leading-relaxed">
+                  The path{" "}
+                  <span className="font-mono text-black break-all">{path}</span>{" "}
+                  doesn't match anything in the gallery.
+                </p>
+                <p className="mt-2 text-sm text-[#717171] leading-relaxed">
+                  Mistyped URL, or the app was removed.
+                </p>
+              </div>
+
+              <div className="border border-[#E5E5E5]">
+                <Link
+                  to="/gallery"
+                  className="h-12 flex items-center justify-between px-5 bg-black text-white hover:bg-[#222] transition-colors group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-widest">
+                    Browse the Gallery
+                  </span>
+                  <span className="text-xs text-[#888] group-hover:text-[#bbb]">→</span>
+                </Link>
+                <Link
+                  to="/"
+                  className="h-12 flex items-center justify-between px-5 bg-white text-black border-t border-[#E5E5E5] hover:bg-[#F5F5F5] transition-colors group"
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-widest">
+                    Back to Home
+                  </span>
+                  <span className="text-xs text-[#717171] group-hover:text-black">→</span>
+                </Link>
+              </div>
+            </div>
+          </div>
         </div>
-    )
+      </main>
+
+      <Footer />
+    </div>
+  );
 }

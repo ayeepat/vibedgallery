@@ -49,11 +49,14 @@ function getImageDimensions(file) {
   })
 }
 
+// Uploads `file` to the app-images bucket and returns
+// { publicUrl, storagePath } so callers can delete the object later if a
+// downstream check (e.g. server-side moderation) rejects it.
 export async function uploadImage(file, userId, folder = 'thumbnails') {
   const ext = file.name.split('.').pop()
   const filename = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`
 
-  const { data, error } = await supabase.storage
+  const { error } = await supabase.storage
     .from('app-images')
     .upload(filename, file, {
       cacheControl: '3600',
@@ -69,5 +72,19 @@ export async function uploadImage(file, userId, folder = 'thumbnails') {
     .from('app-images')
     .getPublicUrl(filename)
 
-  return urlData.publicUrl
+  return { publicUrl: urlData.publicUrl, storagePath: filename }
+}
+
+// Remove an object from the app-images bucket. Best-effort: failures are
+// logged but not thrown — the caller is usually already on an error path.
+export async function deleteImage(storagePath) {
+  if (!storagePath) return
+  try {
+    const { error } = await supabase.storage
+      .from('app-images')
+      .remove([storagePath])
+    if (error) console.warn('deleteImage failed:', error.message)
+  } catch (err) {
+    console.warn('deleteImage threw:', err)
+  }
 }

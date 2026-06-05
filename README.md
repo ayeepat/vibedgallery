@@ -85,6 +85,7 @@ Set via `supabase secrets set` on the project:
 | `ADMIN_EMAIL` | send-email | Recipient for `admin_notification` |
 | `TURNSTILE_SECRET_KEY` | verify-turnstile | Cloudflare secret key |
 | `GOOGLE_SAFE_BROWSING_KEY` | check-url-safety | Optional — if unset, the function returns `skipped:true` and the client treats the URL as safe |
+| `GOOGLE_CLOUD_VISION_KEY` | check-image-safety | Optional — if unset, the function returns `skipped:true` and the client treats the image as safe (admin still spot-checks in the queue) |
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected by the platform; do not set them manually.
 

@@ -9,10 +9,81 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { usePageMeta } from "@/lib/usePageMeta";
 
+// Returns an embeddable src for YouTube/Vimeo/Loom URLs, or null if the URL
+// isn't a recognized provider (in which case we render a plain link).
+function getEmbedUrl(raw) {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, "");
+
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+    }
+    if (host === "youtu.be") {
+      const id = u.pathname.replace(/^\//, "");
+      if (id) return `https://www.youtube.com/embed/${id}`;
+    }
+    if (host === "vimeo.com") {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      if (id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
+    }
+    if (host === "loom.com" || host.endsWith(".loom.com")) {
+      const parts = u.pathname.split("/").filter(Boolean);
+      const idx = parts.indexOf("share");
+      const id = idx >= 0 ? parts[idx + 1] : parts[parts.length - 1];
+      if (id) return `https://www.loom.com/embed/${id}`;
+    }
+  } catch {
+    // Not a parseable URL — fall through to null.
+  }
+  return null;
+}
+
+// Twitter handles are stored as "@name" or bare. Returns a usable URL or null.
+function twitterUrl(raw) {
+  if (!raw) return null;
+  const handle = raw.replace(/^@/, "").trim();
+  if (!handle) return null;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return `https://x.com/${handle}`;
+}
+
+// One view per browser session per app — keeps the counter honest without
+// requiring auth and prevents F5-spam from skewing it.
+const VIEW_SESSION_KEY = "vibedgallery_viewed_apps";
+
+function markViewedThisSession(appId) {
+  try {
+    const raw = sessionStorage.getItem(VIEW_SESSION_KEY);
+    const set = new Set(raw ? JSON.parse(raw) : []);
+    if (set.has(appId)) return false;
+    set.add(appId);
+    sessionStorage.setItem(VIEW_SESSION_KEY, JSON.stringify([...set]));
+    return true;
+  } catch {
+    // sessionStorage blocked — best-effort, fall back to counting once per mount.
+    return true;
+  }
+}
+
 export default function AppDetail() {
   const { id } = useParams();
   const { data: app, isLoading, error } = useApp(id);
   const { data: maker } = useMaker(app?.user_id);
+
+  // Bump the views counter once per session. Fire-and-forget — failures
+  // here don't matter for rendering the page.
+  useEffect(() => {
+    if (!app?.id) return;
+    if (!markViewedThisSession(app.id)) return;
+    supabase
+      .rpc("increment_app_views", { target_app_id: app.id })
+      .then(({ error: rpcError }) => {
+        if (rpcError) console.warn("view counter failed:", rpcError.message);
+      });
+  }, [app?.id]);
 
   // Per-app meta. usePageMeta safely handles undefined values — it falls back
   // to defaults until the app row resolves.
@@ -34,16 +105,10 @@ export default function AppDetail() {
       keywords: [app.category, app.tool, ...(app.tags || [])]
         .filter(Boolean)
         .join(", "),
-      aggregateRating:
-        typeof app.upvotes === "number" && app.upvotes > 0
-          ? {
-              "@type": "AggregateRating",
-              ratingValue: 5,
-              ratingCount: app.upvotes,
-              bestRating: 5,
-              worstRating: 1,
-            }
-          : undefined,
+      // No aggregateRating: we don't have a star-rating system. Upvotes are not
+      // ratings, and forging a 5-star rating from them is the kind of trick
+      // Google rewards with a manual action. If we add real reviews later,
+      // populate this block from that data — not from upvote counts.
     };
   }, [app, maker]);
 
@@ -87,6 +152,10 @@ export default function AppDetail() {
   }
 
   const makerName = maker?.name || "Anonymous Maker";
+  const embedUrl = getEmbedUrl(app.demo_video_url);
+  const twitter = twitterUrl(app.submitter_twitter);
+  const github = app.submitter_github || null;
+  const screenshots = Array.isArray(app.screenshots) ? app.screenshots : [];
 
   return (
     <div className="min-h-screen bg-white">
@@ -171,16 +240,114 @@ export default function AppDetail() {
           <p className="text-base text-black leading-relaxed max-w-2xl">{app.description}</p>
         </div>
 
+        {/* Demo video */}
+        {app.demo_video_url && (
+          <div className="mt-10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-3">Demo</p>
+            {embedUrl ? (
+              <div className="relative w-full aspect-video border border-[#E5E5E5] bg-black">
+                <iframe
+                  src={embedUrl}
+                  title={`${app.name} demo video`}
+                  className="absolute inset-0 w-full h-full"
+                  loading="lazy"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <a
+                href={app.demo_video_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-black border border-[#E5E5E5] px-4 py-2 hover:bg-black hover:text-white transition-colors"
+              >
+                Watch demo →
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Screenshots */}
+        {screenshots.length > 0 && (
+          <div className="mt-10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-3">Screenshots</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {screenshots.map((src, i) => (
+                <a
+                  key={src + i}
+                  href={src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0] border border-[#E5E5E5] group"
+                >
+                  <img
+                    src={src}
+                    alt={`${app.name} screenshot ${i + 1}`}
+                    loading="lazy"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                  />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Maker links + other tools */}
+        {(twitter || github || app.other_tools) && (
+          <div className="mt-10 border border-[#E5E5E5] divide-y divide-[#E5E5E5]">
+            {app.other_tools && (
+              <div className="p-5">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-1">Other Tools</p>
+                <p className="text-sm text-black break-words">{app.other_tools}</p>
+              </div>
+            )}
+            {twitter && (
+              <a
+                href={twitter}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-5 flex items-center justify-between hover:bg-[#F5F5F5] transition-colors group"
+              >
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-1">Maker on X / Twitter</p>
+                  <p className="text-sm font-black uppercase tracking-tight text-black break-all">
+                    {app.submitter_twitter.startsWith("@") ? app.submitter_twitter : `@${app.submitter_twitter.replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//, "")}`}
+                  </p>
+                </div>
+                <span className="text-xs text-[#717171] group-hover:text-black shrink-0 ml-3">↗</span>
+              </a>
+            )}
+            {github && (
+              <a
+                href={github}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-5 flex items-center justify-between hover:bg-[#F5F5F5] transition-colors group"
+              >
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-1">Source on GitHub</p>
+                  <p className="text-sm font-black uppercase tracking-tight text-black break-all">
+                    {github.replace(/^https?:\/\/(www\.)?github\.com\//i, "").replace(/\/$/, "")}
+                  </p>
+                </div>
+                <span className="text-xs text-[#717171] group-hover:text-black shrink-0 ml-3">↗</span>
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Meta row */}
-        <div className="mt-10 grid grid-cols-3 border border-[#E5E5E5]">
+        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 border border-[#E5E5E5]">
           {[
             { label: "Category", value: app.category },
             { label: "Built With", value: app.tool },
-            { label: "Upvotes", value: app.upvotes },
-          ].map((item, i) => (
+            { label: "Upvotes", value: app.upvotes ?? 0 },
+            { label: "Views", value: app.views ?? 0 },
+          ].map((item, i, arr) => (
             <div
               key={item.label}
-              className={`p-5 ${i < 2 ? "border-r border-[#E5E5E5]" : ""}`}
+              className={`p-5 ${i < arr.length - 1 ? "border-b sm:border-b-0 sm:border-r border-[#E5E5E5]" : ""}`}
             >
               <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-1">{item.label}</p>
               <p className="text-sm font-black uppercase tracking-tight text-black">{item.value}</p>

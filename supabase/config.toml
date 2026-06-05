@@ -5,3 +5,14 @@ verify_jwt = true
 
 [functions.verify-html]
 verify_jwt = true
+
+# Public sitemap.xml — search-engine crawlers hit it unauthenticated, and it
+# only reads rows that are already publicly readable via RLS.
+[functions.sitemap]
+verify_jwt = false
+
+# Image safety check is called from the Submit flow (already gated by
+# Turnstile + the apps_insert RLS policy). Keep it open like
+# check-url-safety so the same anti-abuse posture applies to both.
+[functions.check-image-safety]
+verify_jwt = false

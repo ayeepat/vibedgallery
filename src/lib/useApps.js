@@ -1,5 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
+
+// Page size for the gallery's server-paginated listings.
+export const GALLERY_PAGE_SIZE = 24
 
 // Explicit column list for SELECTs on public.apps.
 // `submitter_email` is intentionally OMITTED — that column is locked down at
@@ -27,7 +30,10 @@ export const APP_SELECT_COLUMNS =
 // status) to anyone who can read an approved row.
 export const APP_PUBLIC_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
-  'primary_tool, thumbnail_url, ownership_verified, upvotes, created_at'
+  'primary_tool, other_tools, demo_video_url, ' +
+  'thumbnail_url, screenshot_urls, ' +
+  'submitter_twitter, submitter_github, ' +
+  'ownership_verified, upvotes, views, created_at'
 
 // Normalize a Supabase apps row to the shape the UI was built for.
 function normalizeApp(row) {
@@ -43,6 +49,7 @@ function normalizeApp(row) {
     other_tools: row.other_tools,
     tags: row.tags || [],
     upvotes: row.upvotes ?? 0,
+    views: row.views ?? 0,
     url: row.url,
     image: row.thumbnail_url,
     screenshots: row.screenshot_urls || [],
@@ -55,7 +62,9 @@ function normalizeApp(row) {
   }
 }
 
-// All approved apps, newest first.
+// All approved apps, newest first. Single-shot — used by surfaces that need
+// the full list at once (homepage Trending strip, etc.). The gallery uses
+// `useApprovedAppsInfinite` instead so the payload scales.
 export function useApprovedApps() {
   return useQuery({
     queryKey: ['apps', 'approved'],
@@ -65,8 +74,53 @@ export function useApprovedApps() {
         .select(APP_PUBLIC_COLUMNS)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
+        .limit(GALLERY_PAGE_SIZE * 4)
       if (error) throw error
       return (data || []).map(normalizeApp)
+    },
+    staleTime: 30_000,
+  })
+}
+
+// Server-paginated gallery listing. `sort` is "Newest" | "Trending" and
+// `category` is either a category string or null for all.
+export function useApprovedAppsInfinite({ sort = 'Newest', category = null } = {}) {
+  return useInfiniteQuery({
+    queryKey: ['apps', 'approved', 'infinite', sort, category || 'all'],
+    queryFn: async ({ pageParam = 0 }) => {
+      const from = pageParam * GALLERY_PAGE_SIZE
+      const to = from + GALLERY_PAGE_SIZE - 1
+
+      let query = supabase
+        .from('apps')
+        .select(APP_PUBLIC_COLUMNS, { count: 'exact' })
+        .eq('status', 'approved')
+
+      if (category) query = query.eq('category', category)
+
+      if (sort === 'Trending') {
+        // Tie-break trending on created_at so order is stable across pages.
+        query = query
+          .order('upvotes', { ascending: false })
+          .order('created_at', { ascending: false })
+      } else {
+        query = query.order('created_at', { ascending: false })
+      }
+
+      const { data, error, count } = await query.range(from, to)
+      if (error) throw error
+      return {
+        rows: (data || []).map(normalizeApp),
+        page: pageParam,
+        total: count ?? null,
+      }
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const loaded = (lastPage.page + 1) * GALLERY_PAGE_SIZE
+      if (lastPage.total != null && loaded >= lastPage.total) return undefined
+      if (lastPage.rows.length < GALLERY_PAGE_SIZE) return undefined
+      return lastPage.page + 1
     },
     staleTime: 30_000,
   })
