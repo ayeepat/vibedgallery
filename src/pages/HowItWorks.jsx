@@ -70,7 +70,7 @@ export default function HowItWorks() {
             How It Works
           </motion.p>
           <h1
-            className="text-[clamp(2.5rem,6vw,6rem)] font-black uppercase leading-[0.9] text-black"
+            className="text-[clamp(3rem,6.5vw,6rem)] font-black uppercase leading-[0.9] text-black"
             style={{ letterSpacing: "-0.04em" }}
           >
             {["CREATE.", "SHARE.", "DISCOVER."].map((line, i) => (

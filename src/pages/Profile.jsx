@@ -456,7 +456,7 @@ export default function Profile() {
               animate="visible"
               custom={1}
               variants={metaVariants}
-              className="text-[clamp(2.5rem,6vw,5rem)] font-black uppercase leading-[0.9] text-black break-words"
+              className="text-[clamp(3rem,6.5vw,6rem)] font-black uppercase leading-[0.9] text-black break-words"
               style={{ letterSpacing: "-0.04em" }}
             >
               {displayLabel}

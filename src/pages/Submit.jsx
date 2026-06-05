@@ -732,7 +732,7 @@ export default function Submit() {
         <div className="border-b border-[#E5E5E5] px-8 py-10 flex items-end justify-between">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-3">Submit Your App</p>
-            <h1 className="text-[clamp(2rem,5vw,4rem)] font-black uppercase leading-none" style={{ letterSpacing: "-0.04em" }}>
+            <h1 className="text-[clamp(3rem,6.5vw,6rem)] font-black uppercase leading-none" style={{ letterSpacing: "-0.04em" }}>
               ADD TO THE<br />GALLERY.
             </h1>
           </div>
