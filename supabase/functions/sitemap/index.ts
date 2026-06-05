@@ -21,7 +21,7 @@ const CACHE_CONTROL =
   "public, max-age=600, s-maxage=600, stale-while-revalidate=3600";
 
 const SITE_ORIGIN = (
-  Deno.env.get("SITE_ORIGIN") ?? "https://vibedgallery.com"
+  Deno.env.get("SITE_ORIGIN") ?? "https://www.vibedgallery.com"
 ).replace(/\/$/, "");
 
 // Static routes mirror the previous public/sitemap.xml. Auth-only flows

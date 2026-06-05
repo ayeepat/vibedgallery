@@ -245,6 +245,17 @@ export default function AnalyticsPanel({ submissions }) {
     [approvedApps]
   );
 
+  // The aggregate cards read lifetime counters on the apps row, but the
+  // time-series charts read the day-level tables (app_views_daily / upvotes),
+  // which only start filling once tracking is live. When a lifetime total
+  // exists but there's no day-level history yet, the chart is legitimately
+  // flat — surface a note so a big total over an empty chart doesn't read as a
+  // bug.
+  const noDailyHistory =
+    !loading && dailyViews.length === 0 && totals.totalViews > 0;
+  const noUpvoteHistory =
+    !loading && upvoteEvents.length === 0 && totals.totalUpvotes > 0;
+
   // ───────────────── Empty state ─────────────────
   if (approvedApps.length === 0) {
     return (
@@ -316,9 +327,13 @@ export default function AnalyticsPanel({ submissions }) {
           <h3 className="text-[10px] font-bold uppercase tracking-widest text-black">
             Views — Last 30 Days
           </h3>
-          {loading && (
+          {loading ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#AAAAAA]" />
-          )}
+          ) : noDailyHistory ? (
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              Lifetime total above · daily history starts now
+            </span>
+          ) : null}
         </div>
         <div className="p-4 h-64">
           <ResponsiveContainer width="100%" height="100%">
@@ -367,10 +382,15 @@ export default function AnalyticsPanel({ submissions }) {
 
       {/* Upvotes over time */}
       <div className="border border-[#E5E5E5]">
-        <div className="px-6 py-4 border-b border-[#E5E5E5]">
+        <div className="px-6 py-4 border-b border-[#E5E5E5] flex items-center justify-between">
           <h3 className="text-[10px] font-bold uppercase tracking-widest text-black">
             Upvotes — Last 30 Days
           </h3>
+          {noUpvoteHistory && (
+            <span className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+              Lifetime total above · daily history starts now
+            </span>
+          )}
         </div>
         <div className="p-4 h-48">
           <ResponsiveContainer width="100%" height="100%">

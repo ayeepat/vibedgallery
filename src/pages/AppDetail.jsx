@@ -96,7 +96,7 @@ export default function AppDetail() {
       headline: app.name,
       description: app.tagline || app.description,
       image: app.image,
-      url: `https://vibedgallery.com/app/${app.id}`,
+      url: `https://www.vibedgallery.com/app/${app.id}`,
       datePublished: app.created_at,
       author: maker?.name
         ? { "@type": "Person", name: maker.name }

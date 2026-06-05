@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 const SITE_NAME = 'VibedGallery';
-const SITE_URL = 'https://vibedgallery.com';
+const SITE_URL = 'https://www.vibedgallery.com';
 const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
 
 // Mutate or insert a <meta> by attribute=value (e.g. ["name","description"]).
