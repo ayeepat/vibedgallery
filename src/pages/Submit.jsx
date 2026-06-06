@@ -292,9 +292,16 @@ export default function Submit() {
 
   const handleScreenshot = async (file) => {
     if (screenshots.length >= 4) return;
-    const check = await checkImageSafety(file);
-    if (!check.safe) { setGlobalError(check.errors.join(", ")); return; }
-    setScreenshots((s) => [...s, { file, preview: URL.createObjectURL(file) }]);
+    try {
+      const check = await checkImageSafety(file);
+      if (!check.safe) { setGlobalError(check.errors.join(", ")); return; }
+      setScreenshots((s) => [...s, { file, preview: URL.createObjectURL(file) }]);
+    } catch (err) {
+      // checkImageSafety() rejects when the browser can't decode the file
+      // (corrupt image, CSP blocking blob:, etc.). Surface a real message
+      // instead of letting it bubble as an unhandled rejection.
+      setGlobalError(err?.message || "Failed to process screenshot.");
+    }
   };
 
   const parseTags = (raw) =>
