@@ -31,6 +31,7 @@ const Admin          = lazy(() => import('./pages/Admin'));
 const Profile        = lazy(() => import('./pages/Profile'));
 const Maker          = lazy(() => import('./pages/Maker'));
 const About          = lazy(() => import('./pages/About'));
+const Tag             = lazy(() => import('./pages/Tag'));
 
 const wrap = (el) => <PageTransition>{el}</PageTransition>;
 
@@ -50,6 +51,7 @@ function AnimatedRoutes() {
           <Route path="/"                element={wrap(<Home />)} />
           <Route path="/gallery"         element={wrap(<Gallery />)} />
           <Route path="/app/:id"         element={wrap(<AppDetail />)} />
+          <Route path="/tag/:tag"        element={wrap(<Tag />)} />
           <Route path="/maker/:userId"   element={wrap(<Maker />)} />
           <Route path="/how-it-works"    element={wrap(<HowItWorks />)} />
           <Route path="/about"           element={wrap(<About />)} />

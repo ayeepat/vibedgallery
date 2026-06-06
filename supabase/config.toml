@@ -16,3 +16,9 @@ verify_jwt = false
 # check-url-safety so the same anti-abuse posture applies to both.
 [functions.check-image-safety]
 verify_jwt = false
+
+# Bot-rendered Open Graph preview for /app/:id. Vercel rewrites only when the
+# User-Agent matches a known crawler, but the function is publicly readable
+# anyway since it only returns approved app metadata.
+[functions.og-app]
+verify_jwt = false

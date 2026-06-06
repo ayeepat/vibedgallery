@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { useApprovedAppsInfinite } from "@/lib/useApps";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
+import BookmarkButton from "@/components/BookmarkButton";
 
 const SORTS = ["Newest", "Trending", "Most Viewed"];
 // Mirrors CATEGORIES in src/pages/Submit.jsx so the dropdown can never offer
@@ -221,6 +222,7 @@ export default function Gallery() {
                 initial="hidden"
                 animate="visible"
                 exit="exit"
+                className="relative"
               >
                 <Link
                   to={`/app/${app.id}`}
@@ -275,6 +277,15 @@ export default function Gallery() {
                     </span>
                   </div>
                 </Link>
+                {/* Bookmark toggle — rendered OUTSIDE the Link because a <button>
+                    inside an <a> is invalid HTML (interactive content can't nest
+                    inside <a>) and breaks click handling in Safari. Sibling +
+                    absolute positioning keeps the visual position identical, and
+                    z-10 keeps it above the hover overlay so it stays clickable
+                    on hover. */}
+                <div className="absolute top-2 right-2 z-10">
+                  <BookmarkButton appId={app.id} />
+                </div>
               </motion.div>
             ))}
           </motion.div>

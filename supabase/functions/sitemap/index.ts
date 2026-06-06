@@ -46,6 +46,7 @@ const STATIC_ROUTES: Array<{
 interface AppRow {
   id: string;
   user_id: string | null;
+  tags: string[] | null;
   updated_at: string | null;
   created_at: string | null;
 }
@@ -54,6 +55,16 @@ interface MakerRow {
   user_id: string;
   lastmod: string | null;
 }
+
+interface TagRow {
+  tag: string;
+  lastmod: string | null;
+}
+
+// Per-tag cap so a single overused tag can't blow the 50K sitemap budget.
+// We also cap total tag URLs to keep search engines focused on populated tags.
+const MIN_APPS_PER_TAG = 1;
+const MAX_TAG_URLS = 2_000;
 
 function isoDate(value: string | null): string | null {
   if (!value) return null;
@@ -70,6 +81,39 @@ function escapeXml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+// Derive one TagRow per distinct tag that's used by at least MIN_APPS_PER_TAG
+// approved apps. lastmod is the most recent app updated_at|created_at across
+// apps using that tag, so crawlers can spot when the listing changes.
+// Capped at MAX_TAG_URLS so a hostile/garbage tag flood doesn't bloat the
+// sitemap — top tags by app count are kept.
+function deriveTags(apps: AppRow[]): TagRow[] {
+  const byTag = new Map<string, { count: number; lastmod: string | null }>();
+  for (const app of apps) {
+    if (!Array.isArray(app.tags)) continue;
+    const lm = isoDate(app.updated_at) ?? isoDate(app.created_at);
+    for (const rawTag of app.tags) {
+      if (typeof rawTag !== "string") continue;
+      const tag = rawTag.trim();
+      if (!tag) continue;
+      // Skip absurdly long tags — they're almost certainly junk and a >100-char
+      // path makes the sitemap noisier without earning any crawl value.
+      if (tag.length > 60) continue;
+      const cur = byTag.get(tag);
+      if (cur) {
+        cur.count += 1;
+        if (lm && (!cur.lastmod || lm > cur.lastmod)) cur.lastmod = lm;
+      } else {
+        byTag.set(tag, { count: 1, lastmod: lm });
+      }
+    }
+  }
+  return Array.from(byTag.entries())
+    .filter(([, v]) => v.count >= MIN_APPS_PER_TAG)
+    .sort((a, b) => b[1].count - a[1].count) // most-used tags first
+    .slice(0, MAX_TAG_URLS)
+    .map(([tag, v]) => ({ tag, lastmod: v.lastmod }));
 }
 
 // Derive one MakerRow per distinct creator who has at least one approved app.
@@ -115,6 +159,22 @@ function buildSitemap(apps: AppRow[]): string {
     }
     parts.push("    <changefreq>weekly</changefreq>");
     parts.push("    <priority>0.7</priority>");
+    parts.push("  </url>");
+  }
+
+  // Tag landing pages — one per distinct tag in active use. Each gets a
+  // /tag/:tag URL so search engines can index "X apps tagged #ai" style
+  // pages instead of just /gallery.
+  for (const tag of deriveTags(apps)) {
+    parts.push("  <url>");
+    parts.push(
+      `    <loc>${escapeXml(`${SITE_ORIGIN}/tag/${encodeURIComponent(tag.tag)}`)}</loc>`,
+    );
+    if (tag.lastmod) {
+      parts.push(`    <lastmod>${tag.lastmod}</lastmod>`);
+    }
+    parts.push("    <changefreq>weekly</changefreq>");
+    parts.push("    <priority>0.5</priority>");
     parts.push("  </url>");
   }
 
@@ -179,7 +239,7 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabase
     .from("apps")
-    .select("id, user_id, updated_at, created_at")
+    .select("id, user_id, tags, updated_at, created_at")
     .eq("status", "approved")
     .order("updated_at", { ascending: false, nullsFirst: false })
     .limit(MAX_APP_URLS);

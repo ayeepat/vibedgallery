@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { sanitizeSearchTerm } from '@/lib/urlHelpers'
 
@@ -181,6 +181,112 @@ export function useApprovedAppsByMaker(userId) {
     },
     enabled: !!userId,
     staleTime: 30_000,
+  })
+}
+
+// All approved apps that carry a given tag, newest first. `tag` is matched
+// against the `tags` text[] column with .contains() so the filter happens
+// server-side and the lookup is index-friendly. Case-sensitive by design —
+// callers should pass the normalized tag (the one rendered on the chip).
+export function useAppsByTag(tag) {
+  return useQuery({
+    queryKey: ['apps', 'tag', tag],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('apps')
+        .select(APP_PUBLIC_COLUMNS)
+        .eq('status', 'approved')
+        .contains('tags', [tag])
+        .order('created_at', { ascending: false })
+        .limit(GALLERY_PAGE_SIZE * 4)
+      if (error) throw error
+      return (data || []).map(normalizeApp)
+    },
+    enabled: !!tag,
+    staleTime: 30_000,
+  })
+}
+
+// Apps the signed-in user has bookmarked. We fetch the bookmark rows then
+// hydrate them with the joined apps row in a single query. We only surface
+// bookmarks whose underlying app is currently approved — apps that were
+// removed or never approved should not render dead cards in the Saved tab.
+export function useBookmarkedApps(userId) {
+  return useQuery({
+    queryKey: ['bookmarks', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select(`created_at, apps:app_id (status, ${APP_PUBLIC_COLUMNS})`)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data || [])
+        .map((row) => row.apps)
+        .filter((a) => a && a.status === 'approved')
+        .map(normalizeApp)
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+}
+
+// Returns whether the signed-in user has bookmarked the given app. Used by
+// the bookmark button on cards / detail. The Set lookup means we hit Supabase
+// once per session rather than once per card.
+export function useBookmarkIds(userId) {
+  return useQuery({
+    queryKey: ['bookmarks', 'ids', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select('app_id')
+      if (error) throw error
+      return new Set((data || []).map((r) => r.app_id))
+    },
+    enabled: !!userId,
+    staleTime: 30_000,
+  })
+}
+
+// Toggle a bookmark. Optimistic — flips the cached Set immediately, rolls back
+// on error. Returns a mutate function whose argument is the appId to toggle.
+export function useToggleBookmark(userId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ appId, currentlyBookmarked }) => {
+      if (!userId) throw new Error('Not signed in')
+      if (currentlyBookmarked) {
+        const { error } = await supabase
+          .from('bookmarks')
+          .delete()
+          .eq('app_id', appId)
+          .eq('user_id', userId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('bookmarks')
+          .insert({ app_id: appId, user_id: userId })
+        if (error) throw error
+      }
+    },
+    onMutate: async ({ appId, currentlyBookmarked }) => {
+      await queryClient.cancelQueries({ queryKey: ['bookmarks', 'ids', userId] })
+      const previous = queryClient.getQueryData(['bookmarks', 'ids', userId])
+      const next = new Set(previous instanceof Set ? previous : [])
+      if (currentlyBookmarked) next.delete(appId)
+      else next.add(appId)
+      queryClient.setQueryData(['bookmarks', 'ids', userId], next)
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous !== undefined) {
+        queryClient.setQueryData(['bookmarks', 'ids', userId], context.previous)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookmarks', 'ids', userId] })
+      queryClient.invalidateQueries({ queryKey: ['bookmarks', userId] })
+    },
   })
 }
 

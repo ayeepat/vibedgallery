@@ -6,6 +6,17 @@
       "source": "/sitemap.xml",
       "destination": "https://hgujctmkbmcfpxjhqkzo.supabase.co/functions/v1/sitemap"
     },
+    {
+      "source": "/app/:id",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*([Tt]witterbot|[Ff]acebookexternalhit|[Ff]acebot|[Ss]lackbot|[Dd]iscordbot|[Tt]elegram[Bb]ot|[Ww]hats[Aa]pp|[Ll]inked[Ii]n[Bb]ot|[Pp]interest|[Rr]edditbot|[Ss]kype[Uu]ri[Pp]review|[Gg]ooglebot|[Bb]ingbot|[Dd]uck[Dd]uck[Bb]ot|[Bb]aiduspider|[Yy]andex|[Aa]pplebot|[Cc]hrome-[Ll]ighthouse).*"
+        }
+      ],
+      "destination": "https://hgujctmkbmcfpxjhqkzo.supabase.co/functions/v1/og-app?id=:id"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
@@ -6,7 +7,7 @@ import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import { sanitizeSearchTerm } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
-import { Loader2, Check, X, ExternalLink, Search, ShieldCheck } from "lucide-react";
+import { Loader2, Check, X, ExternalLink, Search, ShieldCheck, Flag } from "lucide-react";
 
 const STATUS_COLORS = {
   pending_verification: "#717171",
@@ -26,6 +27,7 @@ export default function Admin() {
   // Route-level <ProtectedRoute adminOnly> already guarantees the caller is
   // signed-in AND admin before this component mounts — no need to re-check.
   const { user } = useAuth()
+  const [section, setSection] = useState("queue") // "queue" | "reports"
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("pending_review")
@@ -254,10 +256,31 @@ export default function Admin() {
             className="text-3xl font-black uppercase leading-none"
             style={{ letterSpacing: "-0.04em" }}
           >
-            REVIEW QUEUE.
+            {section === "reports" ? "REPORTS." : "REVIEW QUEUE."}
           </h1>
         </div>
 
+        {/* Section switcher — queue vs reports */}
+        <div className="border-b border-[#E5E5E5] flex">
+          <button
+            onClick={() => setSection("queue")}
+            className={`h-10 px-6 text-[10px] font-bold uppercase tracking-widest border-r border-[#E5E5E5] transition-colors ${
+              section === "queue" ? "bg-black text-white" : "text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
+            }`}
+          >
+            Queue
+          </button>
+          <button
+            onClick={() => setSection("reports")}
+            className={`h-10 px-6 text-[10px] font-bold uppercase tracking-widest border-r border-[#E5E5E5] transition-colors inline-flex items-center gap-2 ${
+              section === "reports" ? "bg-black text-white" : "text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
+            }`}
+          >
+            <Flag className="w-3 h-3" /> Reports
+          </button>
+        </div>
+
+        {section === "reports" ? <ReportsPanel /> : <>
         {/* Search — admins search across ALL statuses */}
         <div className="border-b border-[#E5E5E5] px-8 py-3 flex items-center gap-3">
           <Search className="w-4 h-4 text-[#717171] shrink-0" />
@@ -574,7 +597,181 @@ export default function Admin() {
           </div>
 
         </div>
+        </>}
       </div>
+    </div>
+  )
+}
+
+// Reports inbox — lists all reports filed via the ReportDialog. Newest first,
+// with an "Unresolved only" toggle and a per-row resolve button. Reads/writes
+// are gated by the reports table's RLS policies (admin-only update).
+function ReportsPanel() {
+  const { user } = useAuth()
+  const [reports, setReports] = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [unresolvedOnly, setUnresolvedOnly] = useState(true)
+  const [busyId, setBusyId] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const load = async () => {
+      let query = supabase
+        .from("reports")
+        .select("id, app_id, reporter_id, reason, category, resolved, resolved_at, created_at, apps:app_id (title, url, status)")
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (unresolvedOnly) query = query.eq("resolved", false)
+      const { data, error } = await query
+      if (cancelled) return
+      if (error) {
+        console.error("Failed to load reports:", error)
+        setReports([])
+      } else {
+        setReports(data || [])
+      }
+      setLoading(false)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [unresolvedOnly])
+
+  const handleResolve = async (report, resolved) => {
+    setBusyId(report.id)
+    const { error } = await supabase
+      .from("reports")
+      .update({
+        resolved,
+        resolved_by: resolved ? user.id : null,
+        resolved_at: resolved ? new Date().toISOString() : null,
+      })
+      .eq("id", report.id)
+    if (error) {
+      console.error("Failed to update report:", error)
+    } else {
+      // When the filter is "Unresolved only" and we just resolved the row, it
+      // no longer belongs in the list — drop it. Same goes for reopening a row
+      // while "all reports" is on: just flip the fields in place.
+      setReports((prev) => {
+        if (resolved && unresolvedOnly) {
+          return prev.filter((r) => r.id !== report.id)
+        }
+        return prev.map((r) =>
+          r.id === report.id
+            ? {
+                ...r,
+                resolved,
+                resolved_at: resolved ? new Date().toISOString() : null,
+              }
+            : r
+        )
+      })
+    }
+    setBusyId(null)
+  }
+
+  return (
+    <div>
+      <div className="border-b border-[#E5E5E5] px-8 py-3 flex items-center gap-4">
+        <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#717171] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={unresolvedOnly}
+            onChange={(e) => setUnresolvedOnly(e.target.checked)}
+            className="accent-black"
+          />
+          Unresolved only
+        </label>
+        <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+          {reports.length} {unresolvedOnly ? "open" : "total"}
+        </span>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-5 h-5 animate-spin text-[#717171]" />
+        </div>
+      ) : reports.length === 0 ? (
+        <div className="p-8 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+            {unresolvedOnly ? "No unresolved reports" : "No reports filed"}
+          </p>
+        </div>
+      ) : (
+        <ul className="divide-y divide-[#E5E5E5]">
+          {reports.map((r) => (
+            <li key={r.id} className="px-8 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-black border border-[#E5E5E5] px-2 py-0.5">
+                      {r.category}
+                    </span>
+                    {r.resolved ? (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-[#2D5016] border border-[#2D501644] bg-[#2D501611] px-2 py-0.5">
+                        Resolved
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-[#8B0000] border border-[#8B000044] bg-[#8B000011] px-2 py-0.5">
+                        Open
+                      </span>
+                    )}
+                    <span className="text-[9px] text-[#AAAAAA]">
+                      {new Date(r.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-sm font-black uppercase tracking-tight text-black break-words">
+                    {r.apps?.title || "(app not found)"}
+                  </p>
+                  {r.apps?.url && (
+                    <a
+                      href={r.apps.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-[#717171] hover:text-black underline break-all inline-flex items-center gap-1"
+                    >
+                      {r.apps.url} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  <p className="mt-2 text-xs text-black leading-relaxed whitespace-pre-wrap break-words border-l-2 border-[#E5E5E5] pl-3">
+                    {r.reason}
+                  </p>
+                  <div className="mt-2 flex items-center gap-3 text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+                    <span>Reporter: {r.reporter_id ? r.reporter_id.slice(0, 8) : "anon"}</span>
+                    <Link
+                      to={`/app/${r.app_id}`}
+                      className="text-[#717171] hover:text-black underline"
+                    >
+                      Open in gallery →
+                    </Link>
+                  </div>
+                </div>
+                <div className="shrink-0 flex flex-col gap-2">
+                  {r.resolved ? (
+                    <button
+                      onClick={() => handleResolve(r, false)}
+                      disabled={busyId === r.id}
+                      className="h-9 px-4 bg-white text-black border border-[#E5E5E5] text-[10px] font-bold uppercase tracking-widest hover:border-black transition-colors disabled:opacity-50"
+                    >
+                      {busyId === r.id ? "..." : "Reopen"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleResolve(r, true)}
+                      disabled={busyId === r.id}
+                      className="h-9 px-4 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    >
+                      {busyId === r.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      Resolve
+                    </button>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

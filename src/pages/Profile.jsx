@@ -3,11 +3,12 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
-import { APP_SELECT_COLUMNS } from "@/lib/useApps";
+import { APP_SELECT_COLUMNS, useBookmarkedApps } from "@/lib/useApps";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
-import { SubmissionCardSkeleton } from "@/components/Skeleton";
+import BookmarkButton from "@/components/BookmarkButton";
+import { SubmissionCardSkeleton, GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 import {
   Loader2,
@@ -56,6 +57,113 @@ const STATUS_CONFIG = {
     accent: "text-black",
   },
 };
+
+// Saved (bookmarks) tab. Read-only list of the apps the user has bookmarked,
+// rendered with the same gallery-card silhouette. Each card has a bookmark
+// toggle so the user can unsave directly from this view.
+function SavedTab({ userId }) {
+  const { data: bookmarked, isLoading, isError, refetch } = useBookmarkedApps(userId);
+
+  if (isLoading) {
+    return (
+      <section className="max-w-5xl mx-auto px-8 py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <GalleryCardSkeleton key={i} />
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section className="max-w-5xl mx-auto px-8 py-12">
+        <div className="border border-[#E5E5E5] px-10 py-16 flex flex-col items-center text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-red-600">Failed to load</p>
+          <button
+            onClick={() => refetch()}
+            className="mt-6 h-12 px-8 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  const items = bookmarked || [];
+  if (items.length === 0) {
+    return (
+      <section className="max-w-5xl mx-auto px-8 py-12">
+        <div className="border border-[#E5E5E5] px-10 py-16 flex flex-col items-center text-center">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
+            Empty
+          </p>
+          <h2
+            className="mt-3 text-3xl font-black uppercase text-black leading-none"
+            style={{ letterSpacing: "-0.03em" }}
+          >
+            No Saved Apps
+          </h2>
+          <p className="mt-4 text-sm text-[#717171] max-w-sm leading-relaxed">
+            Tap the bookmark icon on any app to save it here.
+          </p>
+          <Link
+            to="/gallery"
+            className="mt-8 h-12 px-8 flex items-center gap-3 bg-black text-white hover:bg-[#222] transition-colors"
+          >
+            <span className="text-[10px] font-bold uppercase tracking-widest">
+              Browse Gallery
+            </span>
+            <span className="text-xs text-[#888]">→</span>
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="max-w-5xl mx-auto px-8 py-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-5 gap-y-8">
+        {items.map((app) => (
+          <div key={app.id} className="relative">
+            <Link
+              to={`/app/${app.id}`}
+              className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
+            >
+              <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
+                <img
+                  src={app.image}
+                  alt={app.name ? `${app.name} preview` : "App preview"}
+                  loading="lazy"
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+              <div className="mt-2 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black uppercase tracking-tight text-black leading-snug group-hover:underline underline-offset-2">
+                    {app.name}
+                  </h3>
+                  <p className="text-[10px] text-[#717171] mt-0.5">
+                    {app.category} · {app.tool}
+                  </p>
+                </div>
+                <span className="text-[10px] font-bold text-[#AAAAAA] whitespace-nowrap mt-0.5">
+                  ▲ {app.upvotes}
+                </span>
+              </div>
+            </Link>
+            {/* Sibling — <button> can't legally nest inside <a>. */}
+            <div className="absolute top-2 right-2 z-10">
+              <BookmarkButton appId={app.id} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function SubmissionCard({ app, onAction, loading }) {
   const config = STATUS_CONFIG[app.status] || STATUS_CONFIG.pending_verification;
@@ -397,6 +505,7 @@ export default function Profile() {
   const tabs = [
     { id: "account", label: "Account" },
     { id: "submissions", label: "Submissions" },
+    { id: "saved", label: "Saved" },
     { id: "analytics", label: "Analytics" },
   ];
   const trimmedDisplayName = displayName.trim();
@@ -508,6 +617,11 @@ export default function Profile() {
             ))}
           </div>
         </div>
+
+        {/* Saved Tab */}
+        {activeTab === "saved" && (
+          <SavedTab userId={user?.id} />
+        )}
 
         {/* Analytics Tab */}
         {activeTab === "analytics" && (

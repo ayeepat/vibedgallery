@@ -9,6 +9,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { toggleUpvoteCount, rollbackUpvoteCount, nextUpvoted } from "@/lib/upvote";
+import BookmarkButton from "@/components/BookmarkButton";
+import ReportDialog from "@/components/ReportDialog";
 
 // Returns an embeddable src for YouTube/Vimeo/Loom URLs, or null if the URL
 // isn't a recognized provider (in which case we render a plain link).
@@ -231,6 +233,8 @@ export default function AppDetail() {
           <div className="flex flex-col gap-2 shrink-0">
             {/* Upvote */}
             <UpvoteButton appId={app.id} initialCount={app.upvotes} />
+            {/* Save / bookmark */}
+            <BookmarkButton appId={app.id} variant="block" />
             {/* Visit */}
             <a
               href={app.url}
@@ -248,6 +252,24 @@ export default function AppDetail() {
           <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-3">About</p>
           <p className="text-base text-black leading-relaxed max-w-2xl">{app.description}</p>
         </div>
+
+        {/* Tag pills — link to /tag/:tag landing pages */}
+        {Array.isArray(app.tags) && app.tags.length > 0 && (
+          <div className="mt-6">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-3">Tags</p>
+            <div className="flex flex-wrap gap-2">
+              {app.tags.map((t) => (
+                <Link
+                  key={t}
+                  to={`/tag/${encodeURIComponent(t)}`}
+                  className="text-[10px] font-bold uppercase tracking-widest text-[#717171] border border-[#E5E5E5] px-3 py-1.5 hover:text-black hover:border-black transition-colors"
+                >
+                  #{t}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Demo video */}
         {app.demo_video_url && (
@@ -346,8 +368,13 @@ export default function AppDetail() {
           </div>
         )}
 
+        {/* Report */}
+        <div className="mt-10 flex justify-end">
+          <ReportDialog appId={app.id} />
+        </div>
+
         {/* Meta row */}
-        <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 border border-[#E5E5E5]">
+        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 border border-[#E5E5E5]">
           {[
             { label: "Category", value: app.category },
             { label: "Built With", value: app.tool },

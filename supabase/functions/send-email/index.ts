@@ -6,6 +6,7 @@
 //   - "admin_notification"      : alert to the admin that a new app arrived
 //   - "approved"                : tell the submitter their app is live
 //   - "rejected"                : tell the submitter why it was rejected
+//   - "report_notification"     : alert the admin that an app was reported
 //
 // Hard rules (vs. older version which trusted body fields):
 //   - JWT is enforced (verify_jwt=true in config.toml).
@@ -41,12 +42,18 @@ type EmailType =
   | "submission_confirmation"
   | "admin_notification"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "report_notification";
 
 interface Payload {
   type: EmailType;
   app: { id?: string };
   rejectionReason?: string;
+  // Only used for "report_notification": the reporter's free-text reason and
+  // category. Bounded server-side so a hostile body can't push arbitrary
+  // content into the admin inbox.
+  reason?: string;
+  category?: string;
 }
 
 interface AppRow {
@@ -151,6 +158,11 @@ Deno.serve(async (req) => {
         .maybeSingle<{ role: string }>();
       callerIsAdmin = profile?.role === "admin";
       if (!callerIsAdmin) return jsonResp({ error: "Admin required" }, 403);
+    } else if (payload.type === "report_notification") {
+      // Reports are filed by any authenticated user. The reports table's own
+      // RLS already enforced that the caller was signed in AND that the app
+      // is approved before we got here — we just need the bearer token to be
+      // valid, which getUser() above confirmed.
     } else {
       // submission_confirmation / admin_notification: must be the app owner.
       if (!callerOwnsApp) return jsonResp({ error: "Not your app" }, 403);
@@ -159,7 +171,7 @@ Deno.serve(async (req) => {
     // Resolve recipient from the app row's submitter_email (set by the
     // apps_set_submitter_email trigger from auth.users at insert time).
     let recipient: string | null = null;
-    if (payload.type === "admin_notification") {
+    if (payload.type === "admin_notification" || payload.type === "report_notification") {
       if (!ADMIN_EMAIL) return jsonResp({ error: "ADMIN_EMAIL not set" }, 500);
       recipient = ADMIN_EMAIL;
     } else {
@@ -211,6 +223,22 @@ Deno.serve(async (req) => {
           <p>Thanks for submitting <strong>${esc(title)}</strong>. After review, we weren't able to approve it this time.</p>
           ${reason ? `<p style="font-size:12px;color:#717171;border-left:3px solid #E5E5E5;padding-left:12px;">${esc(reason)}</p>` : ""}
           <p>You're welcome to address the feedback and submit again.</p>
+        `);
+        break;
+      }
+      case "report_notification": {
+        subject = `Report filed — ${title}`;
+        const reportReason = (payload.reason ?? "").slice(0, 1000);
+        const reportCategory = (payload.category ?? "other").slice(0, 40);
+        body = html("REPORT FILED.", `
+          <p>A user reported an app in the gallery.</p>
+          <p><strong>${esc(title)}</strong><br/>${esc(appRow.tagline)}</p>
+          <p style="font-size:12px;color:#717171;">
+            Category: ${esc(reportCategory)}<br/>
+            URL: ${esc(appRow.url)}
+          </p>
+          ${reportReason ? `<p style="font-size:12px;color:#717171;border-left:3px solid #E5E5E5;padding-left:12px;">${esc(reportReason)}</p>` : ""}
+          <p style="font-size:12px;color:#AAAAAA;">Review the full report in the admin panel.</p>
         `);
         break;
       }
