@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { appPath } from "@/lib/urlHelpers";
+
+// Columns + embedded maker handle needed to build a pretty /<username>/<slug>
+// link straight from a search result.
+const SEARCH_COLUMNS =
+  "id, title, tagline, category, primary_tool, thumbnail_url, slug, " +
+  "maker:public_profiles(username)";
 
 export default function SearchBar() {
   const navigate = useNavigate();
@@ -88,7 +95,7 @@ export default function SearchBar() {
         // One round trip across title / tagline / category / primary_tool.
         const { data: textData, error: textError } = await supabase
           .from("apps")
-          .select("id, title, tagline, category, primary_tool, thumbnail_url")
+          .select(SEARCH_COLUMNS)
           .eq("status", "approved")
           .or(
             [
@@ -108,7 +115,7 @@ export default function SearchBar() {
         if (merged.length < 6) {
           const { data: tagData } = await supabase
             .from("apps")
-            .select("id, title, tagline, category, primary_tool, thumbnail_url")
+            .select(SEARCH_COLUMNS)
             .eq("status", "approved")
             .contains("tags", [term.toLowerCase()])
             .limit(6 - merged.length);
@@ -168,7 +175,7 @@ export default function SearchBar() {
   const goToApp = (app) => {
     setQuery("");
     setOpen(false);
-    navigate(`/app/${app.id}`);
+    navigate(appPath({ id: app.id, slug: app.slug, username: app.maker?.username }));
   };
 
   // Run a full gallery search for the term (the /gallery?q= filter), instead of

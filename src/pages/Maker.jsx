@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { useMaker, useApprovedAppsByMaker } from "@/lib/useApps";
+import { appPath } from "@/lib/urlHelpers";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { Loader2 } from "lucide-react";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -165,7 +166,7 @@ export default function Maker() {
                   initial="hidden"
                   animate="visible"
                 >
-                  <Link to={`/app/${app.id}`} className="block group">
+                  <Link to={appPath(app)} className="block group">
                     <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
                       <img
                         src={app.image}

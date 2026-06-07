@@ -1,6 +1,7 @@
 // Supabase Edge Function: sitemap
 // Dynamic sitemap.xml for vibedgallery — emits the static top-level routes plus
-// one <url> per approved app (/app/:id). Vercel rewrites /sitemap.xml to this
+// one <url> per approved app (pretty /<username>/<slug>, or /app/:id if a row
+// somehow lacks a handle/slug). Vercel rewrites /sitemap.xml to this
 // function so robots.txt and search engines see a single canonical URL.
 //
 // Public endpoint (verify_jwt = false). Reads only `status='approved'` rows,
@@ -46,9 +47,20 @@ const STATIC_ROUTES: Array<{
 interface AppRow {
   id: string;
   user_id: string | null;
+  slug: string | null;
   tags: string[] | null;
   updated_at: string | null;
   created_at: string | null;
+  // Embedded maker handle via apps.user_id -> profiles.id FK.
+  maker: { username: string | null } | null;
+}
+
+// Canonical loc for an app: pretty /<username>/<slug> when both are known,
+// else legacy /app/<id>.
+function appLoc(app: AppRow): string {
+  const username = app.maker?.username;
+  if (username && app.slug) return `${SITE_ORIGIN}/${username}/${app.slug}`;
+  return `${SITE_ORIGIN}/app/${app.id}`;
 }
 
 interface MakerRow {
@@ -152,7 +164,7 @@ function buildSitemap(apps: AppRow[]): string {
     const lastmod = isoDate(app.updated_at) ?? isoDate(app.created_at);
     parts.push("  <url>");
     parts.push(
-      `    <loc>${escapeXml(`${SITE_ORIGIN}/app/${app.id}`)}</loc>`,
+      `    <loc>${escapeXml(appLoc(app))}</loc>`,
     );
     if (lastmod) {
       parts.push(`    <lastmod>${lastmod}</lastmod>`);
@@ -239,7 +251,10 @@ Deno.serve(async (req) => {
 
   const { data, error } = await supabase
     .from("apps")
-    .select("id, user_id, tags, updated_at, created_at")
+    .select(
+      "id, user_id, slug, tags, updated_at, created_at, " +
+        "maker:public_profiles(username)",
+    )
     .eq("status", "approved")
     .order("updated_at", { ascending: false, nullsFirst: false })
     .limit(MAX_APP_URLS);

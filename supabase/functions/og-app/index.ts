@@ -1,5 +1,6 @@
 // Supabase Edge Function: og-app
-// Server-rendered Open Graph preview page for /app/:id. Vercel rewrites the
+// Server-rendered Open Graph preview page for an app — reachable via the pretty
+// /:username/:slug URL or the legacy /app/:id. Vercel rewrites the
 // request here only when the User-Agent matches a known social-card crawler
 // (Twitter/Slack/Discord/Facebook/LinkedIn/etc.), so real human visitors keep
 // hitting the SPA. Crawlers don't run JavaScript, so the client-side
@@ -30,6 +31,7 @@ const CACHE_CONTROL =
 
 interface AppRow {
   id: string;
+  slug: string | null;
   title: string;
   tagline: string | null;
   description: string | null;
@@ -39,6 +41,24 @@ interface AppRow {
   tags: string[] | null;
   created_at: string | null;
   status: string;
+  // Embedded maker handle via apps.user_id -> profiles.id FK.
+  maker: { username: string | null } | null;
+}
+
+// Columns + embedded maker handle. Shared by both lookup paths so either can
+// build the canonical pretty URL. We embed the public_profiles VIEW (not
+// profiles) since anon is RLS-blocked from reading profiles directly; PostgREST
+// resolves the relationship via the apps.user_id -> profiles.id FK.
+const APP_SELECT =
+  "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, " +
+  "maker:public_profiles(username)";
+
+// Canonical URL for an app: the pretty /<username>/<slug> when both are known,
+// else the legacy /app/<id> (which the SPA redirects to the pretty URL).
+function canonicalUrl(app: AppRow): string {
+  const username = app.maker?.username;
+  if (username && app.slug) return `${SITE_ORIGIN}/${username}/${app.slug}`;
+  return `${SITE_ORIGIN}/app/${app.id}`;
 }
 
 function escapeHtml(s: string): string {
@@ -84,7 +104,7 @@ function htmlResponse(body: string, status = 200): Response {
 }
 
 function buildPage(app: AppRow): string {
-  const canonical = `${SITE_ORIGIN}/app/${app.id}`;
+  const canonical = canonicalUrl(app);
   const title = app.title || "App";
   const tagline = app.tagline || "";
   const subtitle = tagline || app.category || "";
@@ -198,17 +218,33 @@ Deno.serve(async (req) => {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  // Vercel rewrites `/app/:id` to `…/og-app?id=:id`. Also accept the raw path
-  // form so we can curl-test the function directly without going through Vercel.
+  // Two entry shapes, both gated to crawlers by the Vercel rewrite:
+  //   • Pretty:  /:username/:slug  ->  ?username=:username&slug=:slug
+  //   • Legacy:  /app/:id          ->  ?id=:id
+  // We also accept the raw path forms so the function can be curl-tested
+  // directly without going through Vercel's rewrites.
   const url = new URL(req.url);
-  let id = url.searchParams.get("id") || "";
-  if (!id) {
-    const m = url.pathname.match(/\/app\/([^/?#]+)/);
-    if (m) id = m[1];
-  }
-  id = id.trim();
+  let id = (url.searchParams.get("id") || "").trim();
+  let username = (url.searchParams.get("username") || "").trim().toLowerCase();
+  let slug = (url.searchParams.get("slug") || "").trim().toLowerCase();
 
-  if (!id || !UUID_RE.test(id)) {
+  if (!id && !(username && slug)) {
+    const legacy = url.pathname.match(/\/app\/([^/?#]+)/);
+    if (legacy) {
+      id = legacy[1].trim();
+    } else {
+      // Generic two-segment path: /:username/:slug
+      const seg = url.pathname.split("/").filter(Boolean);
+      if (seg.length === 2) {
+        username = decodeURIComponent(seg[0]).toLowerCase();
+        slug = decodeURIComponent(seg[1]).toLowerCase();
+      }
+    }
+  }
+
+  // Need either a valid UUID id or a username+slug pair.
+  const hasId = id && UUID_RE.test(id);
+  if (!hasId && !(username && slug)) {
     return htmlResponse(buildNotFound(), 404);
   }
 
@@ -222,14 +258,24 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await supabase
-    .from("apps")
-    .select(
-      "id, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status",
-    )
-    .eq("id", id)
-    .eq("status", "approved")
-    .maybeSingle<AppRow>();
+  let query = supabase.from("apps").select(APP_SELECT).eq("status", "approved");
+  if (hasId) {
+    query = query.eq("id", id);
+  } else {
+    // username lives on the embedded profiles row; !inner makes it a filterable
+    // join. (username, slug) is globally unique.
+    query = supabase
+      .from("apps")
+      .select(
+        "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, " +
+          "maker:public_profiles!inner(username)",
+      )
+      .eq("status", "approved")
+      .eq("slug", slug)
+      .eq("maker.username", username);
+  }
+
+  const { data, error } = await query.maybeSingle<AppRow>();
 
   if (error) {
     console.error("og-app: lookup failed", error);

@@ -5,6 +5,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import Nav from "../components/Nav";
 import Footer from "@/components/Footer";
 import { useApprovedAppsInfinite } from "@/lib/useApps";
+import { appPath } from "@/lib/urlHelpers";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 import BookmarkButton from "@/components/BookmarkButton";
@@ -225,7 +226,7 @@ export default function Gallery() {
                 className="relative"
               >
                 <Link
-                  to={`/app/${app.id}`}
+                  to={appPath(app)}
                   className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
                   onMouseEnter={() => setHoveredId(app.id)}
                   onMouseLeave={() => setHoveredId(null)}

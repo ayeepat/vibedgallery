@@ -7,9 +7,14 @@
 const GENERIC = "Something went wrong. Please try again.";
 const RATE_LIMITED =
   "You're submitting too quickly. Please wait a few minutes and try again.";
+const TAKEN =
+  "That username or app link is already taken. Pick another and try again.";
 
 export function formatSubmitError(rawMessage) {
   const raw = typeof rawMessage === "string" ? rawMessage : "";
   if (/rate limit/i.test(raw)) return RATE_LIMITED;
+  // Never echo raw Postgres unique-violation text (e.g. "duplicate key value
+  // violates unique constraint profiles_username_lower_key") back to the user.
+  if (/duplicate key|unique constraint|already exists/i.test(raw)) return TAKEN;
   return raw || GENERIC;
 }

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Nav from "../components/Nav";
 import Footer from "@/components/Footer";
 import { useApprovedApps } from "@/lib/useApps";
+import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
 
 const MARQUEE_NAMES = [
@@ -161,7 +162,7 @@ export default function Home() {
               viewport={{ once: true, amount: 0.2 }}
               className={i < trending.length - 1 ? "border-r border-[#E5E5E5]" : ""}
             >
-              <Link to={`/app/${app.id}`} className="block group">
+              <Link to={appPath(app)} className="block group">
                 <div className="relative aspect-video overflow-hidden bg-[#F0F0F0]">
                   <img
                     src={app.image}

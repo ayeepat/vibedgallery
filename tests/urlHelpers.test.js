@@ -5,6 +5,11 @@ import {
   normalizeUrl,
   sanitizeRedirectPath,
   sanitizeSearchTerm,
+  slugify,
+  isValidUsername,
+  isValidSlug,
+  appPath,
+  RESERVED_USERNAMES,
 } from "../src/lib/urlHelpers.js";
 
 const NL = String.fromCharCode(10); // newline
@@ -73,4 +78,81 @@ test("sanitizeSearchTerm handles empty / non-string input", () => {
   assert.equal(sanitizeSearchTerm(""), "");
   assert.equal(sanitizeSearchTerm(null), "");
   assert.equal(sanitizeSearchTerm(undefined), "");
+});
+
+// ─── Pretty-URL helpers ──────────────────────────────────────────────────
+
+test("slugify lowercases, dashes non-alnum, trims edge dashes", () => {
+  assert.equal(slugify("My Awesome App"), "my-awesome-app");
+  assert.equal(slugify("  Hello, World!  "), "hello-world");
+  assert.equal(slugify("Zeid Diez"), "zeid-diez");
+  assert.equal(slugify("a___b   c"), "a-b-c");
+  assert.equal(slugify("--edge--"), "edge");
+});
+
+test("slugify caps length and re-trims a trailing dash from the cut", () => {
+  assert.equal(slugify("x".repeat(80)).length, 60);
+  // Cutting mid-string shouldn't leave a trailing dash.
+  assert.ok(!slugify("ab ".repeat(40)).endsWith("-"));
+});
+
+test("slugify handles empty / non-string input", () => {
+  assert.equal(slugify(""), "");
+  assert.equal(slugify(null), "");
+  assert.equal(slugify(undefined), "");
+});
+
+test("isValidUsername accepts 3–30 char handles, rejects bad shapes", () => {
+  assert.equal(isValidUsername("ayeepat"), true);
+  assert.equal(isValidUsername("zudowoodo"), true);
+  assert.equal(isValidUsername("a_b-c9"), true);
+  assert.equal(isValidUsername("ab"), false);          // too short
+  assert.equal(isValidUsername("-lead"), false);        // leading dash
+  assert.equal(isValidUsername("trail-"), false);       // trailing dash
+  assert.equal(isValidUsername("Upper"), false);        // uppercase
+  assert.equal(isValidUsername("has space"), false);
+  assert.equal(isValidUsername("x".repeat(31)), false); // too long
+  assert.equal(isValidUsername(null), false);
+});
+
+test("isValidUsername rejects reserved handles", () => {
+  for (const r of ["app", "maker", "tag", "auth", "admin", "submit"]) {
+    assert.equal(RESERVED_USERNAMES.has(r), true);
+    assert.equal(isValidUsername(r), false);
+  }
+});
+
+test("isValidSlug accepts 1–60 chars, rejects bad shapes", () => {
+  assert.equal(isValidSlug("fluentcode"), true);
+  assert.equal(isValidSlug("a"), true);                 // single char ok
+  assert.equal(isValidSlug("my-app_2"), true);
+  assert.equal(isValidSlug("-lead"), false);
+  assert.equal(isValidSlug("trail-"), false);
+  assert.equal(isValidSlug("Caps"), false);
+  assert.equal(isValidSlug("x".repeat(61)), false);
+  assert.equal(isValidSlug(""), false);
+});
+
+test("appPath builds pretty URL when username + slug present", () => {
+  assert.equal(
+    appPath({ id: "u1", username: "zudowoodo", slug: "notenotes" }),
+    "/zudowoodo/notenotes"
+  );
+});
+
+test("appPath uses the fallback username when the app row lacks one", () => {
+  assert.equal(
+    appPath({ id: "u1", slug: "fluentcode" }, "ayeepat"),
+    "/ayeepat/fluentcode"
+  );
+});
+
+test("appPath falls back to /app/:id when handle parts are missing", () => {
+  assert.equal(appPath({ id: "abc-123", slug: "x" }), "/app/abc-123");
+  assert.equal(appPath({ id: "abc-123", username: "u" }), "/app/abc-123");
+  assert.equal(appPath({ id: "abc-123" }), "/app/abc-123");
+});
+
+test("appPath returns /gallery for a nullish app", () => {
+  assert.equal(appPath(null), "/gallery");
 });

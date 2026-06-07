@@ -18,7 +18,7 @@ export const GALLERY_PAGE_SIZE = 24
 export const APP_SELECT_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, ' +
-  'verification_token, ownership_verified, ' +
+  'verification_token, ownership_verified, slug, ' +
   'safe_browsing_passed, safe_browsing_threats, thumbnail_flagged, ' +
   'status, rejection_reason, reviewed_by, reviewed_at, ' +
   'submitter_twitter, submitter_github, ' +
@@ -32,9 +32,21 @@ export const APP_SELECT_COLUMNS =
 export const APP_PUBLIC_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, ' +
-  'thumbnail_url, screenshot_urls, ' +
+  'thumbnail_url, screenshot_urls, slug, ' +
   'submitter_twitter, submitter_github, ' +
   'ownership_verified, upvotes, views, created_at'
+
+// PostgREST embed that pulls the maker's handle alongside an apps row. We embed
+// the public_profiles VIEW (not profiles) because anon is RLS-blocked from
+// reading profiles directly — embedding profiles returns null for logged-out
+// visitors. PostgREST resolves apps -> public_profiles via the
+// apps.user_id -> profiles.id FK (apps_user_id_profiles_fkey) that backs the
+// view. Lets the gallery build pretty /<username>/<slug> links in one round-trip.
+export const MAKER_EMBED = 'maker:public_profiles(username)'
+
+// APP_PUBLIC_COLUMNS plus the embedded maker handle — the standard select for
+// public surfaces that render app cards/links.
+export const APP_PUBLIC_SELECT = `${APP_PUBLIC_COLUMNS}, ${MAKER_EMBED}`
 
 // Normalize a Supabase apps row to the shape the UI was built for.
 function normalizeApp(row) {
@@ -60,6 +72,10 @@ function normalizeApp(row) {
     ownership_verified: row.ownership_verified === true,
     created_at: row.created_at,
     status: row.status,
+    // Pretty-URL parts. `username` comes from the embedded maker (or a flat
+    // `username` column when a caller already joined it); both feed appPath().
+    slug: row.slug ?? null,
+    username: row.maker?.username ?? row.username ?? null,
   }
 }
 
@@ -72,7 +88,7 @@ export function useApprovedApps() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_PUBLIC_COLUMNS)
+        .select(APP_PUBLIC_SELECT)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(GALLERY_PAGE_SIZE * 4)
@@ -99,7 +115,7 @@ export function useApprovedAppsInfinite({ sort = 'Newest', category = null, q = 
 
       let query = supabase
         .from('apps')
-        .select(APP_PUBLIC_COLUMNS, { count: 'exact' })
+        .select(APP_PUBLIC_SELECT, { count: 'exact' })
         .eq('status', 'approved')
 
       if (category) query = query.eq('category', category)
@@ -148,20 +164,48 @@ export function useApprovedAppsInfinite({ sort = 'Newest', category = null, q = 
   })
 }
 
-// Single approved app by id (uuid string).
+// Single approved app by id (uuid string). Still used by the legacy /app/:id
+// route, which redirects to the pretty URL once this resolves the maker handle.
 export function useApp(id) {
   return useQuery({
     queryKey: ['app', id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_PUBLIC_COLUMNS)
+        .select(APP_PUBLIC_SELECT)
         .eq('id', id)
         .single()
       if (error) throw error
       return normalizeApp(data)
     },
     enabled: !!id,
+  })
+}
+
+// Single approved app by its pretty URL parts: /<username>/<slug>. Slugs are
+// only unique per maker, so we must match BOTH segments — an inner join on the
+// maker handle (globally unique) pins it to exactly one row. Username/slug are
+// lowercased to match the canonical stored form regardless of link casing.
+export function useAppByHandle(username, slug) {
+  const u = (username || '').toLowerCase()
+  const s = (slug || '').toLowerCase()
+  return useQuery({
+    queryKey: ['app', 'handle', u, s],
+    queryFn: async () => {
+      // No explicit status filter — RLS governs visibility (anon sees only
+      // approved rows; an owner/admin can resolve their own pending app), which
+      // keeps the legacy /app/:id -> pretty-URL redirect valid in every case.
+      // (username, slug) is globally unique, so maybeSingle() is safe.
+      const { data, error } = await supabase
+        .from('apps')
+        .select(`${APP_PUBLIC_COLUMNS}, maker:public_profiles!inner(username)`)
+        .eq('slug', s)
+        .eq('maker.username', u)
+        .maybeSingle()
+      if (error) throw error
+      return data ? normalizeApp(data) : null
+    },
+    enabled: !!u && !!s,
   })
 }
 
@@ -172,7 +216,7 @@ export function useApprovedAppsByMaker(userId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_PUBLIC_COLUMNS)
+        .select(APP_PUBLIC_SELECT)
         .eq('status', 'approved')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -194,7 +238,7 @@ export function useAppsByTag(tag) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apps')
-        .select(APP_PUBLIC_COLUMNS)
+        .select(APP_PUBLIC_SELECT)
         .eq('status', 'approved')
         .contains('tags', [tag])
         .order('created_at', { ascending: false })
@@ -217,7 +261,7 @@ export function useBookmarkedApps(userId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('bookmarks')
-        .select(`created_at, apps:app_id (status, ${APP_PUBLIC_COLUMNS})`)
+        .select(`created_at, apps:app_id (status, ${APP_PUBLIC_SELECT})`)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data || [])
@@ -298,7 +342,7 @@ export function useMaker(userId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('public_profiles')
-        .select('id, name, avatar_url, created_at')
+        .select('id, name, avatar_url, created_at, username')
         .eq('id', userId)
         .maybeSingle()
       if (error) throw error

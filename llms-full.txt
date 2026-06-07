@@ -124,7 +124,7 @@ public/
 |---|---|---|---|
 | `/` | Home | Public | Landing page with featured/trending apps |
 | `/gallery` | Gallery | Public | Paginated gallery with sort (Newest/Trending/Most Viewed), category filter, search |
-| `/app/:id` | AppDetail | Public | Single app detail (screenshots, upvotes, tags, maker link) |
+| `/:username/:appslug` | AppDetail | Public | Single app detail (screenshots, upvotes, tags, maker link). Pretty URL, e.g. `/zudowoodo/notenotes`. Legacy `/app/:id` still works and redirects here. |
 | `/tag/:tag` | Tag | Public | Apps matching a specific tag |
 | `/maker/:userId` | Maker | Public | Public maker profile with their approved apps |
 | `/how-it-works` | HowItWorks | Public | Submission flow explainer |
@@ -218,7 +218,7 @@ All Edge Functions run on Deno (Supabase Edge Functions runtime).
 - Secrets: `GOOGLE_CLOUD_VISION_KEY` (optional)
 
 ### `og-app`
-- Generates dynamic Open Graph HTML for social media previews on `/app/:id` URLs
+- Generates dynamic Open Graph HTML for social media previews on `/:username/:appslug` (and legacy `/app/:id`) URLs
 - Triggered by bot user-agent detection in `vercel.json` rewrites
 
 ### `sitemap`

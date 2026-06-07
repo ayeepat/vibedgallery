@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { APP_SELECT_COLUMNS, useBookmarkedApps } from "@/lib/useApps";
+import { isValidUsername, RESERVED_USERNAMES, appPath } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
@@ -129,7 +130,7 @@ function SavedTab({ userId }) {
         {items.map((app) => (
           <div key={app.id} className="relative">
             <Link
-              to={`/app/${app.id}`}
+              to={appPath(app)}
               className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
             >
               <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
@@ -298,6 +299,12 @@ export default function Profile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
 
+  // Username / handle (used in pretty app URLs: /<username>/<appslug>)
+  const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState(""); // "" | "checking" | "available" | "taken"
+  const [usernameLoading, setUsernameLoading] = useState(false);
+
   const [displayNameError, setDisplayNameError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [displayNameLoading, setDisplayNameLoading] = useState(false);
@@ -326,8 +333,31 @@ export default function Profile() {
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.name || "");
+      setUsername(profile.username || "");
     }
   }, [profile]);
+
+  // Gentle normalization while typing (lowercase + invalid runs → "-").
+  const cleanHandle = (v) => String(v).toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+
+  // Debounced live availability check, mirroring the submit form.
+  useEffect(() => {
+    const u = username.trim();
+    if (!u || u === (profile?.username || "")) { setUsernameStatus(""); return; }
+    if (RESERVED_USERNAMES.has(u)) { setUsernameStatus(""); return; }
+    if (!isValidUsername(u)) { setUsernameStatus(""); return; }
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", u)
+        .maybeSingle();
+      if (error) { setUsernameStatus(""); return; }
+      setUsernameStatus(data && data.id !== user?.id ? "taken" : "available");
+    }, 450);
+    return () => clearTimeout(t);
+  }, [username, profile?.username, user?.id]);
 
   useEffect(() => {
     if (!user) return;
@@ -373,6 +403,37 @@ export default function Profile() {
       setDisplayNameError(err.message || "Failed to update display name");
     }
     setDisplayNameLoading(false);
+  };
+
+  const handleUsernameSave = async () => {
+    const u = username.trim();
+    if (!u) {
+      setUsernameError("Username cannot be empty");
+      return;
+    }
+    if (RESERVED_USERNAMES.has(u)) {
+      setUsernameError("That username is reserved");
+      return;
+    }
+    if (!isValidUsername(u)) {
+      setUsernameError("3–30 chars: lowercase a–z, 0–9, - or _");
+      return;
+    }
+
+    setUsernameLoading(true);
+    setUsernameError("");
+    try {
+      await updateProfile({ username: u });
+      setUsernameStatus("");
+      showSuccess("Username updated");
+    } catch (err) {
+      if (err?.code === "23505") {
+        setUsernameError("That username is taken");
+      } else {
+        setUsernameError(err.message || "Failed to update username");
+      }
+    }
+    setUsernameLoading(false);
   };
 
   const handlePasswordChange = async () => {
@@ -464,7 +525,8 @@ export default function Profile() {
         element.click();
         document.body.removeChild(element);
       } else if (action === "view") {
-        navigate(`/app/${app.id}`);
+        // Owner's own approved app — build the pretty URL from their handle.
+        navigate(appPath(app, profile?.username));
       } else if (action === "resubmit") {
         navigate(`/submit?app_id=${app.id}`);
       }
@@ -510,6 +572,8 @@ export default function Profile() {
   ];
   const trimmedDisplayName = displayName.trim();
   const nameUnchanged = trimmedDisplayName === (profile?.name || "");
+  const trimmedUsername = username.trim();
+  const usernameUnchanged = trimmedUsername === (profile?.username || "");
   const passwordFieldsFilled =
     currentPassword.length > 0 &&
     newPassword.length > 0 &&
@@ -756,6 +820,82 @@ export default function Profile() {
                   {displayNameLoading ? "Saving..." : "Save Changes"}
                 </span>
                 {displayNameLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <span className="text-xs text-[#888]">→</span>
+                )}
+              </button>
+            </div>
+
+            {/* Username / Handle — used in pretty app URLs */}
+            <div className="border border-[#E5E5E5]">
+              <div className="px-6 py-4 border-b border-[#E5E5E5]">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-black">
+                  Username
+                </h3>
+                <p className="text-[11px] text-[#717171] mt-1">
+                  Your handle in app links. Changing it updates the links for all your apps.
+                </p>
+              </div>
+
+              {usernameError && (
+                <div className="px-6 py-3 bg-[#FFF0F0] border-b border-[#FFD0D0] flex items-center gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-black flex-shrink-0" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black">
+                    {usernameError}
+                  </p>
+                </div>
+              )}
+
+              <div className="px-6 py-4 border-b border-[#E5E5E5]">
+                <label className="block text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
+                  Handle
+                </label>
+                <div className="flex items-center gap-1 text-sm">
+                  <span className="text-[#AAAAAA] font-mono">vibedgallery.com/</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(cleanHandle(e.target.value));
+                      setUsernameError("");
+                    }}
+                    maxLength={30}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="yourhandle"
+                    className="flex-1 min-w-0 bg-transparent text-sm text-black placeholder:text-[#AAAAAA] focus:outline-none lowercase"
+                  />
+                </div>
+                {usernameStatus === "checking" && (
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mt-2">Checking availability…</p>
+                )}
+                {usernameStatus === "available" && (
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-black mt-2 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3 h-3" /> Available
+                  </p>
+                )}
+                {usernameStatus === "taken" && (
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-black mt-2">⚠ That username is taken</p>
+                )}
+              </div>
+
+              <button
+                onClick={handleUsernameSave}
+                disabled={
+                  usernameLoading ||
+                  usernameUnchanged ||
+                  !trimmedUsername ||
+                  usernameStatus === "taken" ||
+                  usernameStatus === "checking"
+                }
+                className="w-full h-12 px-6 flex items-center justify-between bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {usernameLoading ? "Saving..." : "Save Changes"}
+                </span>
+                {usernameLoading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <span className="text-xs text-[#888]">→</span>

@@ -18,7 +18,7 @@ VibedGallery showcases projects created with AI-assisted development tools like 
 
 - `/` — Homepage with featured/trending apps
 - `/gallery` — Paginated, filterable, sortable app listing
-- `/app/:id` — App detail with screenshots, upvotes, tags
+- `/:username/:appslug` — App detail with screenshots, upvotes, tags (e.g. /zudowoodo/notenotes). Legacy `/app/:id` links redirect here.
 - `/tag/:tag` — Apps filtered by tag
 - `/maker/:userId` — Public maker profile
 - `/submit` — Protected submission form (captcha + URL safety check + image upload + ownership verification)

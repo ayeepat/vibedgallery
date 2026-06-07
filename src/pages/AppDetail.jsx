@@ -1,7 +1,8 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import Nav from "../components/Nav";
 import Footer from "@/components/Footer";
-import { useApp, useMaker } from "@/lib/useApps";
+import { useApp, useAppByHandle, useMaker } from "@/lib/useApps";
+import { appPath } from "@/lib/urlHelpers";
 import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -72,9 +73,25 @@ function markViewedThisSession(appId) {
 }
 
 export default function AppDetail() {
-  const { id } = useParams();
-  const { data: app, isLoading, error } = useApp(id);
+  // This component serves both the legacy /app/:id route and the pretty
+  // /:username/:slug route. useParams gives us whichever pair matched.
+  const { id, username, slug } = useParams();
+  const navigate = useNavigate();
+
+  const byId = useApp(id);
+  const byHandle = useAppByHandle(username, slug);
+  const { data: app, isLoading, error } = id ? byId : byHandle;
+
   const { data: maker } = useMaker(app?.user_id);
+
+  // Legacy /app/:id links redirect to the canonical pretty URL once the maker
+  // handle + slug resolve, so shared/old links land on /<username>/<slug>.
+  useEffect(() => {
+    if (!id || !app) return;
+    if (app.username && app.slug) {
+      navigate(appPath(app), { replace: true });
+    }
+  }, [id, app, navigate]);
 
   // Bump the views counter once per session. Fire-and-forget — failures
   // here don't matter for rendering the page.
@@ -101,7 +118,7 @@ export default function AppDetail() {
       headline: app.name,
       description: app.tagline || app.description,
       image: app.image,
-      url: `https://www.vibedgallery.com/app/${app.id}`,
+      url: `https://www.vibedgallery.com${appPath(app)}`,
       datePublished: app.created_at,
       author: maker?.name
         ? { "@type": "Person", name: maker.name }
@@ -127,7 +144,7 @@ export default function AppDetail() {
     description: app
       ? (app.description || app.tagline || `${app.name} — built with ${app.tool}.`).slice(0, 200)
       : "App details on VibedGallery.",
-    path: `/app/${id || ""}`,
+    path: app ? appPath(app) : `/app/${id || ""}`,
     image: app?.image,
     type: "article",
     noindex: shouldNoindex,
@@ -232,7 +249,7 @@ export default function AppDetail() {
 
           <div className="flex flex-col gap-2 shrink-0">
             {/* Upvote */}
-            <UpvoteButton appId={app.id} initialCount={app.upvotes} />
+            <UpvoteButton appId={app.id} initialCount={app.upvotes} returnPath={appPath(app)} />
             {/* Save / bookmark */}
             <BookmarkButton appId={app.id} variant="block" />
             {/* Visit */}
@@ -397,7 +414,7 @@ export default function AppDetail() {
   );
 }
 
-function UpvoteButton({ appId, initialCount }) {
+function UpvoteButton({ appId, initialCount, returnPath }) {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -437,7 +454,7 @@ function UpvoteButton({ appId, initialCount }) {
 
   const handleUpvote = async () => {
     if (!isAuthenticated) {
-      const from = `/app/${appId}`;
+      const from = returnPath || `/app/${appId}`;
       navigate(`/login?from=${encodeURIComponent(from)}`);
       return;
     }

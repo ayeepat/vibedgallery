@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { useAppsByTag } from "@/lib/useApps";
+import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import BookmarkButton from "@/components/BookmarkButton";
@@ -114,7 +115,7 @@ export default function Tag() {
                   className="relative"
                 >
                   <Link
-                    to={`/app/${app.id}`}
+                    to={appPath(app)}
                     className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
                   >
                     <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">

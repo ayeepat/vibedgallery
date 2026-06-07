@@ -68,6 +68,12 @@ function AnimatedRoutes() {
           <Route path="/admin"           element={wrap(<ProtectedRoute adminOnly><Admin /></ProtectedRoute>)} />
           <Route path="/profile"         element={wrap(<ProtectedRoute><Profile /></ProtectedRoute>)} />
 
+          {/* Pretty app URLs: /<username>/<appslug>. This two-segment dynamic
+              route ranks below every static/known route above (/gallery,
+              /app/:id, /maker/:userId, /tag/:tag, /auth/callback); reserved
+              usernames (see urlHelpers) prevent the remaining collisions. */}
+          <Route path="/:username/:slug" element={wrap(<AppDetail />)} />
+
           {/* 404 */}
           <Route path="*"                element={wrap(<PageNotFound />)} />
         </Routes>

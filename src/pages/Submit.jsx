@@ -6,8 +6,8 @@ import { generateVerificationToken } from "@/lib/verifyOwnership";
 import { checkImageSafety, uploadImage, deleteImage } from "@/lib/imageCheck";
 import { sendEmail, verifyTurnstile, checkImageSafetyRemote } from "@/lib/edgeFunctions";
 import { checkUrlSafety } from "@/lib/safeBrowsing";
-import { normalizeUrl } from "@/lib/urlHelpers";
-import { Loader2, X, Download, Image as ImageIcon } from "lucide-react";
+import { normalizeUrl, slugify, isValidUsername, isValidSlug, RESERVED_USERNAMES } from "@/lib/urlHelpers";
+import { Loader2, X, Download, Image as ImageIcon, Check } from "lucide-react";
 import Nav from "@/components/Nav";
 import Turnstile from "@/components/Turnstile";
 import { usePageMeta } from "@/lib/usePageMeta";
@@ -213,10 +213,35 @@ function FieldError({ msg }) {
   );
 }
 
+// ─── Live availability hint for the username/slug fields ──────
+// status: "" (nothing) | "checking" | "ok" | any other string = error message.
+function HandleHint({ status }) {
+  if (!status) return null;
+  if (status === "checking") {
+    return (
+      <p className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] border-b border-[#E5E5E5]">
+        Checking availability…
+      </p>
+    );
+  }
+  if (status === "ok") {
+    return (
+      <p className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black bg-[#F5F5F5] border-b border-[#E5E5E5] flex items-center gap-1.5">
+        <Check className="w-3 h-3" /> Available
+      </p>
+    );
+  }
+  return (
+    <p className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-black bg-[#FFF0F0] border-b border-[#FFD0D0]">
+      ⚠ {status}
+    </p>
+  );
+}
+
 // ─── Main ─────────────────────────────────────────────────────
 export default function Submit() {
   // <ProtectedRoute> guarantees the user is signed in before this mounts.
-  const { user } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
 
   usePageMeta({
     title: "Submit Your App",
@@ -229,10 +254,18 @@ export default function Submit() {
     title: "", tagline: "", description: "", url: "",
     category: "", tags: "", primaryTool: "", otherTools: "",
     demoVideoUrl: "", twitterHandle: "", githubRepo: "",
+    username: "", slug: "",
     ownershipConfirmed: false,
   };
 
   const [form, setForm] = useState(() => loadDraft() || defaultForm);
+  // Whether the user has hand-edited the slug. Until they do, it auto-tracks the
+  // slugified app title. A restored draft slug counts as already edited.
+  const [slugEdited, setSlugEdited] = useState(() => !!loadDraft()?.slug);
+  // Live availability/format feedback for the two pretty-URL fields.
+  // state: "" | "checking" | "ok" | message-string (anything else is an error).
+  const [usernameStatus, setUsernameStatus] = useState("");
+  const [slugStatus, setSlugStatus] = useState("");
   const [thumbnail, setThumbnail] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   // Only the setter is consumed (drives the per-field upload state machine);
@@ -252,6 +285,73 @@ export default function Submit() {
   const captchaRef = useRef(null);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
+
+  // Gentle normalization while typing a handle/slug: lowercase + collapse any
+  // run of invalid chars to a single "-". We DON'T trim a trailing "-" here so
+  // the user can type "my-app" without the dash being eaten mid-word; the
+  // submit-time validator (isValidUsername/isValidSlug) enforces the full rule.
+  const cleanHandle = (v) => String(v).toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+
+  // Pre-fill the username from the maker's saved handle (or a slug of their
+  // display name) the first time the form has none — they reuse one handle
+  // across all their apps.
+  useEffect(() => {
+    if (!profile) return;
+    setForm((f) => {
+      if (f.username) return f;
+      const seed = profile.username || slugify(profile.name) || "";
+      return seed ? { ...f, username: seed } : f;
+    });
+  }, [profile]);
+
+  // Until the user hand-edits the slug, keep it tracking the app title.
+  useEffect(() => {
+    if (slugEdited) return;
+    const auto = slugify(form.title);
+    setForm((f) => (f.slug === auto ? f : { ...f, slug: auto }));
+  }, [form.title, slugEdited]);
+
+  // Debounced username availability + format check (global, case-insensitive).
+  useEffect(() => {
+    const u = form.username;
+    if (!u) { setUsernameStatus(""); return; }
+    if (RESERVED_USERNAMES.has(u)) { setUsernameStatus("That username is reserved"); return; }
+    if (!isValidUsername(u)) { setUsernameStatus("3–30 chars: a–z, 0–9, - or _"); return; }
+    // Unchanged from the maker's saved handle — definitely available to them.
+    if (profile?.username && profile.username.toLowerCase() === u) { setUsernameStatus("ok"); return; }
+    setUsernameStatus("checking");
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("username", u)
+        .maybeSingle();
+      if (error) { setUsernameStatus(""); return; }
+      if (data && data.id !== user?.id) setUsernameStatus("That username is taken");
+      else setUsernameStatus("ok");
+    }, 450);
+    return () => clearTimeout(t);
+  }, [form.username, profile?.username, user?.id]);
+
+  // Debounced slug availability + format check (unique within this maker).
+  useEffect(() => {
+    const s = form.slug;
+    if (!s) { setSlugStatus(""); return; }
+    if (!isValidSlug(s)) { setSlugStatus("1–60 chars: a–z, 0–9, - or _"); return; }
+    setSlugStatus("checking");
+    const t = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("apps")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("slug", s)
+        .maybeSingle();
+      if (error) { setSlugStatus(""); return; }
+      if (data) setSlugStatus("You already have an app with this link");
+      else setSlugStatus("ok");
+    }, 450);
+    return () => clearTimeout(t);
+  }, [form.slug, user?.id]);
 
   // Auto-save
   useEffect(() => {
@@ -318,6 +418,11 @@ export default function Submit() {
     if (!form.description.trim()) e.description = "Required";
     if (form.description.length > 500) e.description = "Max 500 characters";
     if (!form.url.trim()) e.url = "Required";
+    if (!form.username.trim()) e.username = "Pick a username for your link";
+    else if (RESERVED_USERNAMES.has(form.username)) e.username = "That username is reserved";
+    else if (!isValidUsername(form.username)) e.username = "3–30 chars: a–z, 0–9, - or _";
+    if (!form.slug.trim()) e.slug = "Pick a link for this app";
+    else if (!isValidSlug(form.slug)) e.slug = "1–60 chars: a–z, 0–9, - or _";
     if (!form.category) e.category = "Required";
     if (!form.primaryTool) e.primaryTool = "Required";
     if (!thumbnail) e.thumbnail = "Thumbnail is required";
@@ -358,6 +463,26 @@ export default function Submit() {
       }
 
       const appUrl = normalizeUrl(form.url);
+
+      // Claim the maker handle before doing any expensive upload work. It's
+      // saved to the profile so it's reused across all the maker's apps; the
+      // DB's unique index is the final authority (the live check above is just
+      // UX). Skip the write when it already matches their saved handle.
+      const wantUsername = form.username.trim();
+      if (profile?.username?.toLowerCase() !== wantUsername) {
+        try {
+          await updateProfile({ username: wantUsername });
+        } catch (err) {
+          if (err?.code === "23505") {
+            setErrors((e) => ({ ...e, username: "That username is taken" }));
+          } else {
+            setGlobalError(formatSubmitError(err?.message));
+          }
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          setLoading(false);
+          return;
+        }
+      }
 
       // Safe browsing check
       const safety = await checkUrlSafety(appUrl);
@@ -446,6 +571,7 @@ export default function Submit() {
           // trigger from auth.users; the column is also revoked from clients.
           submitter_twitter: form.twitterHandle || null,
           submitter_github: githubUrl,
+          slug: form.slug.trim(),
           title: form.title.trim(),
           tagline: form.tagline.trim(),
           description: form.description.trim(),
@@ -467,6 +593,19 @@ export default function Submit() {
 
       if (error) {
         console.error("DB insert error:", error);
+        // Slug collided with another of this maker's apps between the live
+        // check and the insert — remove the just-uploaded media and surface a
+        // field-level error rather than a generic failure.
+        if (error.code === "23505") {
+          await Promise.all(uploadedPaths.map(deleteImage));
+          setErrors((e) => ({ ...e, slug: "You already have an app with this link" }));
+          setGlobalError("That link is already taken — pick another and resubmit.");
+          captchaRef.current?.reset();
+          setCaptchaToken("");
+          setLoading(false);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         throw new Error(error.message);
       }
 
@@ -538,7 +677,12 @@ export default function Submit() {
 
   const handleClearDraft = () => {
     clearDraft();
-    setForm(defaultForm);
+    // Keep the maker's handle pre-filled — it's reused across apps — but drop
+    // everything else, including the auto-derived slug.
+    setForm({ ...defaultForm, username: profile?.username || slugify(profile?.name) || "" });
+    setSlugEdited(false);
+    setUsernameStatus("");
+    setSlugStatus("");
     setThumbnail(null);
     setThumbnailPreview(null);
     setScreenshots([]);
@@ -845,6 +989,56 @@ export default function Submit() {
                     ? `${parseTags(form.tags).length} tags — only the first 5 will be saved`
                     : null)
                 } />
+              </div>
+
+              <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Your Public Link</span>
+              </div>
+              <div className="border border-[#E5E5E5] mx-8 mt-6 mb-6">
+                {/* Live preview of the shareable URL */}
+                <div className="px-4 py-3 border-b border-[#E5E5E5] bg-[#FAFAFA]">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171] block mb-1.5">
+                    Your app will live at
+                  </span>
+                  <p className="text-xs font-mono text-black break-all leading-relaxed">
+                    vibedgallery.com/<span className="font-bold">{form.username || "username"}</span>
+                    /<span className="font-bold">{form.slug || "app-name"}</span>
+                  </p>
+                </div>
+
+                <Field label="Username (your handle)" required>
+                  <input
+                    type="text"
+                    value={form.username}
+                    onChange={(e) => set("username", cleanHandle(e.target.value))}
+                    placeholder="yourhandle"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={30}
+                    className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none lowercase"
+                  />
+                </Field>
+                {errors.username
+                  ? <FieldError msg={errors.username} />
+                  : <HandleHint status={usernameStatus} />}
+
+                <Field label="App link (slug)" required>
+                  <input
+                    type="text"
+                    value={form.slug}
+                    onChange={(e) => { setSlugEdited(true); set("slug", cleanHandle(e.target.value)); }}
+                    placeholder="my-app"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    maxLength={60}
+                    className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none lowercase"
+                  />
+                </Field>
+                {errors.slug
+                  ? <FieldError msg={errors.slug} />
+                  : <HandleHint status={slugStatus} />}
               </div>
 
               <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
