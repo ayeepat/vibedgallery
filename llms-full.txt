@@ -1,0 +1,350 @@
+# VibedGallery — Full Reference
+
+> A curated gallery of apps built with AI coding tools. Submit a live URL, prove ownership with a verification file, and get listed after admin approval.
+
+## Overview
+
+VibedGallery showcases projects created with AI-assisted development tools — Cursor, Windsurf, Lovable, Bolt, Replit, Claude, ChatGPT, Gemini, v0, and others. Users register, submit their app's live URL with metadata, verify site ownership via a cryptographic token-based HTML file, and wait for human admin approval. Approved apps appear in a public gallery with upvotes, bookmarks, search, filtering, and maker profiles.
+
+---
+
+## Stack
+
+- **Frontend**: React 18 + Vite 6, React Router 6 (SPA with lazy-loaded routes), TanStack Query 5 (data fetching + caching), Tailwind CSS 3, shadcn/ui (Radix UI primitives), framer-motion (page transitions + animations), lucide-react (icons), Vercel Analytics + Speed Insights
+- **Backend**: Supabase — Postgres with Row-Level Security (RLS) for all tables, Storage bucket `app-images` for uploads, seven Edge Functions (Deno runtime) for server-side work
+- **Anti-abuse**: Cloudflare Turnstile (captcha) on register + submit, Google Safe Browsing on submitted URLs, Google Cloud Vision for image moderation, SSRF guards on Edge Functions
+- **Email**: Resend, called from the `send-email` Edge Function
+- **Hosting**: Vercel (static SPA deployment with rewrites, security headers, and OG image proxying)
+- **Security headers**: CSP, HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, strict Referrer-Policy, restrictive Permissions-Policy
+
+---
+
+## Project Layout
+
+```
+src/
+  App.jsx                    — Routes + providers (ErrorBoundary > Router > AuthProvider > QueryClientProvider)
+  main.jsx                   — Bootstrap (ReactDOM.createRoot)
+  index.css                  — Tailwind base + custom styles
+
+  pages/
+    Home.jsx                 — Landing page with featured/trending apps
+    Gallery.jsx              — Paginated, filterable, sortable app listing (infinite scroll)
+    AppDetail.jsx            — Single app view with screenshots, upvotes, tags, maker info
+    Tag.jsx                  — Apps filtered by a specific tag
+    Maker.jsx                — Public maker profile page
+    Submit.jsx               — Protected submission form
+    Admin.jsx                — Admin review queue
+    Profile.jsx              — User profile + submission history + bookmarks
+    HowItWorks.jsx           — Submission flow explainer
+    About.jsx                — About page
+    Login.jsx                — Email/password + OAuth login
+    Register.jsx             — Registration with email OTP verification
+    ForgotPassword.jsx       — Password reset request
+    ResetPassword.jsx        — New password form
+    AuthCallback.jsx         — OAuth callback handler
+
+  components/
+    Nav.jsx                  — Top navigation bar
+    SearchBar.jsx            — Global search with URL-synced query parameter
+    Turnstile.jsx            — Cloudflare Turnstile captcha widget wrapper
+    ProtectedRoute.jsx       — Auth gate (optional adminOnly flag)
+    ErrorBoundary.jsx        — Top-level React error boundary
+    BookmarkButton.jsx       — Bookmark toggle with optimistic updates
+    ReportDialog.jsx         — Report inappropriate content dialog
+    AnalyticsPanel.jsx       — Admin analytics panel
+    Footer.jsx               — Site footer
+    PageTransition.jsx       — framer-motion page transition wrapper
+    ScrollToTop.jsx          — Scrolls to top on route change
+    Skeleton.jsx             — Loading skeleton components
+    AuthLayout.jsx           — Shared layout for auth pages
+    GithubIcon.jsx           — GitHub SVG icon
+    GoogleIcon.jsx           — Google SVG icon
+    ui/                      — shadcn/ui primitives (button, card, dialog, toast, tabs, select, etc.)
+
+  lib/
+    supabaseClient.js        — Singleton supabase-js client
+    AuthContext.jsx           — React context: session management, profile fetching, auth methods (login, register, OAuth, OTP, password reset)
+    useApps.js               — TanStack Query hooks for apps, bookmarks, and maker lookups
+    query-client.js          — QueryClient singleton with default options
+    edgeFunctions.js         — Thin wrappers around all Edge Functions
+    safeBrowsing.js          — Client wrapper for check-url-safety Edge Function
+    imageCheck.js            — Client-side image validation (dimensions, file size)
+    imageConstraints.js      — Shared image constraint constants
+    verifyOwnership.js       — Client-side ownership verification + token management
+    verifyTokens.js          — Pure token generation + verification HTML builder
+    upvote.js                — Pure helpers for optimistic upvote math
+    urlHelpers.js            — URL normalization, search term sanitization, redirect path validation
+    submitErrors.js          — Submission error message mapping
+    usePageMeta.js           — Dynamic page title/meta management
+    PageNotFound.jsx         — 404 page
+    utils.js                 — General utilities (cn for class merging)
+
+  hooks/
+    use-mobile.jsx           — Mobile viewport detection hook
+
+  utils/
+    index.ts                 — Shared utility exports
+
+supabase/
+  config.toml                — Supabase CLI configuration
+  functions/
+    _shared/
+      cors.ts                — CORS headers helper for Edge Functions
+      ssrfGuard.ts           — SSRF protection (blocks private IPs, localhost, metadata endpoints)
+      verifyToken.ts         — JWT verification helper for Edge Functions
+    send-email/index.ts      — Transactional email via Resend (JWT + RLS-aware)
+    verify-html/index.ts     — Server-side ownership file check (bypasses CORS)
+    verify-turnstile/index.ts — Cloudflare Turnstile captcha verification
+    check-url-safety/index.ts — Google Safe Browsing API wrapper
+    check-image-safety/index.ts — Google Cloud Vision moderation
+    og-app/index.ts          — Dynamic Open Graph image generation for social sharing
+    sitemap/index.ts         — Dynamic XML sitemap generation
+
+tests/
+  submit.test.js             — Submission flow tests
+  upvote.test.js             — Upvote math tests
+  verify.test.js             — Ownership verification tests
+  urlHelpers.test.js         — URL helper tests
+  ssrfGuard.test.js          — SSRF guard tests
+
+public/
+  favicon.svg                — Site favicon
+  og-image.png               — Default Open Graph image
+  robots.txt                 — Search engine directives
+  privacy.html               — Privacy policy
+  terms.html                 — Terms of service
+```
+
+---
+
+## Routes
+
+| Path | Component | Access | Description |
+|---|---|---|---|
+| `/` | Home | Public | Landing page with featured/trending apps |
+| `/gallery` | Gallery | Public | Paginated gallery with sort (Newest/Trending/Most Viewed), category filter, search |
+| `/app/:id` | AppDetail | Public | Single app detail (screenshots, upvotes, tags, maker link) |
+| `/tag/:tag` | Tag | Public | Apps matching a specific tag |
+| `/maker/:userId` | Maker | Public | Public maker profile with their approved apps |
+| `/how-it-works` | HowItWorks | Public | Submission flow explainer |
+| `/about` | About | Public | About page |
+| `/login` | Login | Public | Email/password + OAuth (GitHub, Google) |
+| `/register` | Register | Public | Registration with Turnstile captcha + email OTP |
+| `/forgot-password` | ForgotPassword | Public | Password reset email request |
+| `/reset-password` | ResetPassword | Public | Set new password (from email link) |
+| `/auth/callback` | AuthCallback | Public | OAuth redirect handler |
+| `/submit` | Submit | Authenticated | App submission form |
+| `/admin` | Admin | Admin only | Review queue with verification tools |
+| `/profile` | Profile | Authenticated | Profile editing, submission history, bookmarks |
+
+---
+
+## Database Schema
+
+All tables have Row-Level Security (RLS) enabled.
+
+### `profiles`
+- 1:1 with `auth.users` (created via trigger on signup)
+- Columns: `id` (uuid, PK), `name`, `avatar_url`, `role` (user | admin), `created_at`, `updated_at`
+- `submitter_email` is locked down — anon/authenticated have no SELECT privilege
+
+### `apps`
+- Submitted applications
+- Status lifecycle: `pending_verification` → `pending_review` → `approved` | `rejected`
+- Key columns: `id`, `user_id`, `title`, `tagline`, `description`, `url`, `category`, `tags` (text[]), `primary_tool`, `other_tools`, `demo_video_url`, `thumbnail_url`, `screenshot_urls` (text[]), `verification_token`, `ownership_verified`, `safe_browsing_passed`, `safe_browsing_threats`, `thumbnail_flagged`, `status`, `rejection_reason`, `reviewed_by`, `reviewed_at`, `submitter_twitter`, `submitter_github`, `upvotes`, `views`, `created_at`, `updated_at`
+
+### `upvotes`
+- One row per (user, app) — unique constraint
+- Columns: `id`, `user_id`, `app_id`, `created_at`
+
+### `bookmarks`
+- Saved apps per user — unique constraint on (user_id, app_id)
+- Columns: `id`, `user_id`, `app_id`, `created_at`
+
+### `public_profiles` (view)
+- Exposes safe profile fields (id, name, avatar_url, created_at) for public maker pages
+- `security_invoker = true`
+
+### Storage
+- Bucket: `app-images` (public CDN access, no API enumeration)
+
+---
+
+## Submission Flow (Detailed)
+
+1. **Form entry** (`/submit`): User fills title, tagline, description, URL, category, primary AI tool, optional tags, screenshots, demo video URL, social links
+2. **Captcha**: Cloudflare Turnstile token verified via `verify-turnstile` Edge Function
+3. **URL safety**: Submitted URL checked against Google Safe Browsing via `check-url-safety` Edge Function
+4. **Image upload**: Thumbnail uploaded to `app-images` Storage bucket, moderated via `check-image-safety` Edge Function (Cloud Vision)
+5. **Row creation**: App inserted with `status = 'pending_verification'`; a 128-bit hex verification token is generated client-side
+6. **Verification file**: User downloads `<token>.html` and deploys it to their site's public folder
+7. **Ownership confirmation**: Clicking "I've Deployed The File" transitions status to `pending_review` and sets `ownership_verified = true`
+8. **Admin review** (`/admin`): Admin runs `verify-html` Edge Function against the live URL (server-side, bypasses CORS), then approves or rejects with optional reason
+9. **Notification**: Submitter receives email via `send-email` Edge Function (approval or rejection with reason)
+
+---
+
+## Edge Functions
+
+All Edge Functions run on Deno (Supabase Edge Functions runtime).
+
+### `send-email`
+- Sends transactional email via Resend API
+- JWT + RLS-aware authentication
+- Email types: submission confirmation, approval notification, rejection notification, admin notification
+- Secrets: `RESEND_API_KEY`, `EMAIL_FROM`, `ADMIN_EMAIL`
+
+### `verify-html`
+- Server-side ownership file check — fetches `<url>/<token>.html` and `<url>/<token>.txt`
+- Bypasses browser CORS restrictions
+- SSRF-guarded (blocks private IPs, localhost, metadata endpoints)
+- No secrets required (uses Supabase auto-injected credentials)
+
+### `verify-turnstile`
+- Validates Cloudflare Turnstile captcha tokens server-side
+- Secrets: `TURNSTILE_SECRET_KEY`
+
+### `check-url-safety`
+- Wraps Google Safe Browsing Lookup API v4
+- Returns `{ safe, threats[], skipped? }`
+- Gracefully degrades if `GOOGLE_SAFE_BROWSING_KEY` is not configured (returns `skipped: true`)
+- Secrets: `GOOGLE_SAFE_BROWSING_KEY` (optional)
+
+### `check-image-safety`
+- Image moderation via Google Cloud Vision SafeSearch
+- Returns `{ safe, threats[], skipped? }`
+- Gracefully degrades if `GOOGLE_CLOUD_VISION_KEY` is not configured
+- Secrets: `GOOGLE_CLOUD_VISION_KEY` (optional)
+
+### `og-app`
+- Generates dynamic Open Graph HTML for social media previews on `/app/:id` URLs
+- Triggered by bot user-agent detection in `vercel.json` rewrites
+
+### `sitemap`
+- Generates dynamic XML sitemap with all approved app URLs
+- Served at `/sitemap.xml` via Vercel rewrite
+
+### Shared Utilities (`_shared/`)
+- `cors.ts` — CORS headers for Edge Function responses
+- `ssrfGuard.ts` — Blocks requests to private IP ranges, localhost, link-local, metadata endpoints (169.254.x.x, AWS/GCP/Azure metadata)
+- `verifyToken.ts` — JWT verification for authenticated Edge Function calls
+
+---
+
+## Authentication
+
+- **Email/password**: Registration with email OTP verification (6-digit code)
+- **OAuth**: GitHub and Google sign-in via Supabase Auth
+- **Session**: Managed by supabase-js; `AuthContext` listens to `onAuthStateChange` for token refreshes
+- **Profile loading**: Fetched once per unique user ID (ref-guarded to prevent redundant fetches on token refresh)
+- **Redirect handling**: Post-auth redirect stored in `sessionStorage` (avoids Supabase redirect-URL allowlist issues); `sanitizeRedirectPath` prevents open redirects
+- **Captcha**: Turnstile required on registration and submission (bypassed in dev when `VITE_TURNSTILE_SITE_KEY` is blank)
+
+---
+
+## Data Fetching
+
+TanStack Query hooks in `useApps.js`:
+
+- `useApprovedApps()` — All approved apps (single-shot, used by homepage)
+- `useApprovedAppsInfinite({ sort, category, q })` — Server-paginated gallery (24 per page) with sort (Newest/Trending/Most Viewed), category filter, and ilike text search
+- `useApp(id)` — Single app by UUID
+- `useApprovedAppsByMaker(userId)` — Maker's approved apps
+- `useAppsByTag(tag)` — Apps containing a specific tag (server-side `.contains()`)
+- `useBookmarkedApps(userId)` — User's bookmarked apps (joined query)
+- `useBookmarkIds(userId)` — Set of bookmarked app IDs (for O(1) lookup)
+- `useToggleBookmark(userId)` — Optimistic bookmark toggle mutation
+- `useMaker(userId)` — Public profile from `public_profiles` view
+
+Column sets:
+- `APP_PUBLIC_COLUMNS` — Lean set for public reads (no review-pipeline internals)
+- `APP_SELECT_COLUMNS` — Full set for admin/owner views (includes verification_token, safe_browsing_*, etc.)
+- `submitter_email` is never selected — locked at DB level
+
+---
+
+## Security Measures
+
+- **Row-Level Security**: All tables have RLS enabled; policies restrict reads/writes per role
+- **SSRF Protection**: Edge Functions use `ssrfGuard.ts` to block requests to private IPs, localhost, and cloud metadata endpoints
+- **Input Sanitization**: `sanitizeSearchTerm()` strips PostgREST metacharacters from search queries; `sanitizeRedirectPath()` prevents open redirects
+- **Content Security Policy**: Strict CSP via Vercel headers (script-src, connect-src, frame-src whitelisted)
+- **Security Headers**: HSTS (2-year max-age, preload), X-Frame-Options DENY, nosniff, strict referrer policy, restrictive permissions policy
+- **Column-level access control**: `submitter_email` has no SELECT privilege for anon/authenticated roles; admins fetch via RPC
+- **Captcha**: Cloudflare Turnstile on registration and submission with server-side verification
+- **URL validation**: Google Safe Browsing check before app approval
+- **Image moderation**: Cloud Vision SafeSearch before thumbnail acceptance
+
+---
+
+## Environment Variables
+
+### Client-side (Vite `VITE_*` prefix, shipped in bundle)
+| Variable | Description |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anonymous/publishable key |
+| `VITE_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (blank to bypass in dev) |
+| `VITE_APP_BASE_URL` | App base URL (http://localhost:5173 for dev) |
+
+### Edge Function Secrets (set via `supabase secrets set`)
+| Secret | Used by | Required |
+|---|---|---|
+| `RESEND_API_KEY` | send-email | Yes |
+| `EMAIL_FROM` | send-email | Yes |
+| `ADMIN_EMAIL` | send-email | Yes |
+| `TURNSTILE_SECRET_KEY` | verify-turnstile | Yes |
+| `GOOGLE_SAFE_BROWSING_KEY` | check-url-safety | No (degrades gracefully) |
+| `GOOGLE_CLOUD_VISION_KEY` | check-image-safety | No (degrades gracefully) |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected by the platform.
+
+---
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Vite dev server (http://localhost:5173) |
+| `npm run build` | Production bundle to `dist/` |
+| `npm run preview` | Serve the built bundle locally |
+| `npm run lint` | ESLint (errors only, quiet mode) |
+| `npm run lint:fix` | ESLint with auto-fix |
+| `npm run typecheck` | TypeScript checking over JSX sources (via jsconfig.json) |
+| `npm test` | Node test runner on `tests/**/*.test.js` |
+
+---
+
+## Deployment
+
+Static SPA deployed to Vercel. `vercel.json` configures:
+- SPA fallback rewrite (`/(.*) → /index.html`)
+- Static page rewrites (`/privacy → /privacy.html`, `/terms → /terms.html`)
+- Sitemap rewrite (`/sitemap.xml → sitemap Edge Function`)
+- OG image bot detection (user-agent matching for social crawlers → `og-app` Edge Function)
+- Security headers (CSP, HSTS, X-Frame-Options, etc.)
+
+---
+
+## Key Dependencies
+
+| Package | Purpose |
+|---|---|
+| `react` + `react-dom` | UI framework |
+| `react-router-dom` | Client-side routing |
+| `@tanstack/react-query` | Server state management + caching |
+| `@supabase/supabase-js` | Supabase client (auth, DB, storage, functions) |
+| `tailwindcss` + `tailwind-merge` | Utility-first CSS |
+| `@radix-ui/*` | Accessible UI primitives (via shadcn/ui) |
+| `framer-motion` | Page transitions + animations |
+| `lucide-react` | Icon library |
+| `zod` | Schema validation |
+| `react-hook-form` + `@hookform/resolvers` | Form management |
+| `sonner` | Toast notifications |
+| `recharts` | Admin analytics charts |
+| `date-fns` | Date formatting |
+| `class-variance-authority` | Component variant management |
+| `vaul` | Drawer component |
+| `cmdk` | Command palette |
+| `@vercel/analytics` + `@vercel/speed-insights` | Production analytics |

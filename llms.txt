@@ -1,0 +1,70 @@
+# VibedGallery
+
+> A curated gallery of apps built with AI coding tools. Submit a live URL, prove ownership with a verification file, and get listed after admin approval.
+
+## Overview
+
+VibedGallery showcases projects created with AI-assisted development tools like Cursor, Windsurf, Lovable, Bolt, Replit, Claude, ChatGPT, Gemini, and v0. Users register, submit their app's live URL, verify site ownership via a token-based HTML file, and wait for human admin approval before the app appears in the public gallery.
+
+## Stack
+
+- Frontend: React 18, Vite 6, React Router 6, TanStack Query 5, Tailwind CSS 3, shadcn/ui (Radix), framer-motion, lucide-react
+- Backend: Supabase (Postgres + RLS, Storage, Edge Functions)
+- Anti-abuse: Cloudflare Turnstile captcha, Google Safe Browsing, Google Cloud Vision (image moderation)
+- Email: Resend (via Edge Function)
+- Hosting: Vercel (static SPA)
+
+## Key Pages
+
+- `/` — Homepage with featured/trending apps
+- `/gallery` — Paginated, filterable, sortable app listing
+- `/app/:id` — App detail with screenshots, upvotes, tags
+- `/tag/:tag` — Apps filtered by tag
+- `/maker/:userId` — Public maker profile
+- `/submit` — Protected submission form (captcha + URL safety check + image upload + ownership verification)
+- `/admin` — Admin review queue (approve/reject with server-side verification)
+- `/profile` — User profile management and submission history
+- `/how-it-works` — Submission flow explainer
+- `/about` — About page
+
+## Core Flow
+
+1. User registers (email OTP or OAuth via GitHub/Google)
+2. Submits app URL — Turnstile captcha, Safe Browsing check, image moderation
+3. Downloads a verification HTML file containing a unique token
+4. Deploys the file to their site's public folder
+5. Admin reviews, runs server-side ownership verification, approves or rejects
+6. Approved apps appear in the gallery; submitter is emailed either way
+
+## Database Tables
+
+- `profiles` — 1:1 with auth.users; role (user/admin)
+- `apps` — submitted apps; status (pending_verification, pending_review, approved, rejected)
+- `upvotes` — one row per (user, app)
+- `bookmarks` — saved apps per user
+- `public_profiles` — view exposing safe profile fields
+
+## Edge Functions
+
+- `send-email` — transactional email via Resend
+- `verify-html` — server-side ownership file check (bypasses CORS)
+- `verify-turnstile` — Cloudflare Turnstile captcha verification
+- `check-url-safety` — Google Safe Browsing wrapper
+- `check-image-safety` — Google Cloud Vision moderation
+- `og-app` — dynamic Open Graph images for social sharing
+- `sitemap` — dynamic sitemap generation
+
+## Local Development
+
+```bash
+npm install
+cp .env.local.example .env.local   # fill in values
+npm run dev                        # http://localhost:5173
+```
+
+## Environment Variables
+
+- `VITE_SUPABASE_URL` — Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` — Supabase anonymous key
+- `VITE_TURNSTILE_SITE_KEY` — Cloudflare Turnstile site key (blank to bypass in dev)
+- `VITE_APP_BASE_URL` — App base URL

@@ -108,13 +108,13 @@ export default function Login() {
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
                   Apps Listed
                 </p>
-                <p className="text-2xl font-black uppercase mt-1">2,400+</p>
+                <p className="text-2xl font-black uppercase mt-1">1+</p>
               </div>
               <div className="flex-1 p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
                   Builders
                 </p>
-                <p className="text-2xl font-black uppercase mt-1">890+</p>
+                <p className="text-2xl font-black uppercase mt-1">1+</p>
               </div>
             </div>
           </div>
