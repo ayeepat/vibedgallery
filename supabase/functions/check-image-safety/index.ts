@@ -13,11 +13,13 @@
 // Returns: { safe: boolean, classifications?: object, threats?: string[],
 //            skipped?: boolean, error?: string }
 //
-// Fail-safe behaviour mirrors check-url-safety:
-//   - GOOGLE_CLOUD_VISION_KEY missing → { safe:true, skipped:true } so a
-//     server-config gap doesn't block submissions while the admin still sees
-//     the row in their queue and can spot-check manually.
-//   - Upstream/parse errors → { safe:false } so submission is rejected.
+// Fail-OPEN behaviour (every submission is manually reviewed before it is ever
+// shown publicly, so a moderation gap never exposes unmoderated content):
+//   - GOOGLE_CLOUD_VISION_KEY missing → { safe:true, skipped:true }.
+//   - Upstream/timeout/parse errors (the SERVICE failed, not a verdict) →
+//     { safe:true, skipped:true, degraded:true } so a server-side outage can't
+//     trap every submitter in a retry loop. Logged loudly + flagged for review.
+//   - Only a real content verdict (adult/violence LIKELY+) → { safe:false }.
 
 import { corsHeaders } from "../_shared/cors.ts";
 import {
@@ -56,6 +58,16 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "content-type": "application/json" },
   });
+}
+
+// The moderation SERVICE failed (key rejected, Vision unreachable, timeout,
+// unclassifiable response) — as opposed to a content verdict. Fail OPEN but
+// flag it: a server-side outage must never trap every submitter in a retry
+// loop. Every submission is still manually reviewed before it goes public, so
+// nothing unmoderated is ever shown. Mirrors the missing-key `skipped` path.
+function degraded(reason: string): Response {
+  console.error("check-image-safety: degraded (failing open) —", reason);
+  return json({ safe: true, skipped: true, degraded: true, reason });
 }
 
 Deno.serve(async (req) => {
@@ -123,35 +135,21 @@ Deno.serve(async (req) => {
 
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
-      console.error(
-        "check-image-safety: Vision upstream failed",
-        upstream.status,
-        detail,
-      );
-      return json({
-        safe: false,
-        error: "Upstream image safety check failed. Try again.",
-      });
+      return degraded(`Vision upstream HTTP ${upstream.status}: ${detail}`);
     }
 
     const data = (await upstream.json()) as VisionResponse;
     const r = data.responses?.[0];
 
     if (r?.error?.message) {
-      console.error("check-image-safety: Vision returned error", r.error.message);
-      return json({
-        safe: false,
-        error: "Image safety check failed. Please try again.",
-      });
+      return degraded(`Vision per-image error: ${r.error.message}`);
     }
 
     const annotation = r?.safeSearchAnnotation;
     if (!annotation) {
-      // Vision didn't return a SafeSearch result — fail closed.
-      return json({
-        safe: false,
-        error: "Image could not be classified. Try a different file.",
-      });
+      // Vision didn't return a SafeSearch result — treat as a service gap, not
+      // a verdict, and let the manual review catch anything questionable.
+      return degraded("Vision returned no SafeSearch annotation");
     }
 
     const threats: string[] = [];
@@ -165,13 +163,7 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     const isAbort = (err as Error)?.name === "AbortError";
-    console.error("check-image-safety error", isAbort ? "timeout" : err);
-    return json({
-      safe: false,
-      error: isAbort
-        ? "Image safety check timed out. Please try again."
-        : "Image safety check failed. Please try again.",
-    });
+    return degraded(isAbort ? "Vision request timed out" : `Vision fetch threw: ${String(err)}`);
   } finally {
     clearTimeout(timeoutId);
   }

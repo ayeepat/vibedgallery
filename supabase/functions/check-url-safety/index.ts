@@ -78,12 +78,7 @@ Deno.serve(async (req) => {
 
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
-      console.error("Safe Browsing upstream failed", upstream.status, detail);
-      return json({
-        safe: false,
-        threats: ["API_ERROR"],
-        error: "Upstream Safe Browsing check failed. Try again.",
-      });
+      return degraded(`Safe Browsing upstream HTTP ${upstream.status}: ${detail}`);
     }
 
     const data = (await upstream.json()) as { matches?: SafeBrowsingMatch[] };
@@ -97,12 +92,7 @@ Deno.serve(async (req) => {
 
     return json({ safe: true, threats: [] });
   } catch (err) {
-    console.error("check-url-safety error", err);
-    return json({
-      safe: false,
-      threats: ["API_ERROR"],
-      error: "URL safety check failed. Please try again.",
-    });
+    return degraded(`Safe Browsing fetch threw: ${String(err)}`);
   }
 });
 
@@ -111,4 +101,13 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, "content-type": "application/json" },
   });
+}
+
+// The Safe Browsing SERVICE failed (unreachable / non-200) — not a verdict that
+// the URL is malicious. Fail OPEN but flag it: an upstream outage must not trap
+// every submitter. Real threat matches still hard-block. Every submission is
+// manually reviewed before going public. Mirrors the missing-key `skipped` path.
+function degraded(reason: string): Response {
+  console.error("check-url-safety: degraded (failing open) —", reason);
+  return json({ safe: true, threats: [], skipped: true, degraded: true, reason });
 }

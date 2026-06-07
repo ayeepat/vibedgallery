@@ -45,20 +45,17 @@ export async function checkImageSafetyRemote(url) {
     })
     if (error) throw error
     if (!data || typeof data.safe !== 'boolean') {
-      return {
-        safe: false,
-        threats: ['API_ERROR'],
-        error: 'Could not verify image. Please try again.',
-      }
+      // Malformed response — treat as a service gap, not a verdict. Fail open
+      // (admin reviews every submission before it's public) so a transient
+      // moderation hiccup can't trap the submitter in a retry loop.
+      return { safe: true, skipped: true, degraded: true }
     }
     return data
   } catch (err) {
-    console.error('checkImageSafetyRemote failed:', err)
-    return {
-      safe: false,
-      threats: ['API_ERROR'],
-      error: 'Could not verify image. Please try again.',
-    }
+    console.error('checkImageSafetyRemote failed (failing open):', err)
+    // The moderation function is unreachable — don't block the user. Manual
+    // review is the real backstop; only-approved apps are ever shown publicly.
+    return { safe: true, skipped: true, degraded: true }
   }
 }
 

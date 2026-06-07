@@ -14,27 +14,23 @@ export async function checkUrlSafety(url) {
     if (error) throw error
 
     if (!data || typeof data.safe !== 'boolean') {
-      return {
-        safe: false,
-        threats: ['API_ERROR'],
-        error: 'Could not verify URL safety. Please try again.',
-      }
+      // Malformed response — degrade rather than trap the submitter. Admin
+      // reviews every submission before it goes public.
+      return { safe: true, threats: [], skipped: true, degraded: true }
     }
 
-    // Operator hasn't configured GOOGLE_SAFE_BROWSING_KEY. Don't block
-    // submissions on a server config gap — accept the URL but flag it so
-    // admins can see it bypassed Safe Browsing in the queue.
+    // Server config gap (no key) or an upstream outage (degraded). Don't block
+    // submissions — accept the URL but flag it so admins can see it bypassed
+    // Safe Browsing in the queue. A real threat match still returns safe:false.
     if (data.skipped) {
-      return { safe: true, threats: [], skipped: true }
+      return { safe: true, threats: [], skipped: true, degraded: !!data.degraded }
     }
 
     return data
   } catch (err) {
-    console.error('checkUrlSafety failed:', err)
-    return {
-      safe: false,
-      threats: ['API_ERROR'],
-      error: 'Could not verify URL safety. Please try again.',
-    }
+    console.error('checkUrlSafety failed (failing open):', err)
+    // Edge function unreachable — degrade, don't trap. Manual review is the
+    // real backstop and only approved apps are ever shown publicly.
+    return { safe: true, threats: [], skipped: true, degraded: true }
   }
 }
