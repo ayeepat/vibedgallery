@@ -969,9 +969,12 @@ function EditsPanel() {
     if (!selected) return
     setActionLoading(true)
     try {
-      // If URL changed, re-run Safe Browsing on the new URL before we commit it
-      // to the live apps row. If we can't reach it, prompt rather than block.
-      let safeFields = {}
+      // If URL changed, re-run Safe Browsing on the new URL before we commit
+      // it to the live apps row. If we can't reach it, prompt rather than
+      // block. The verdict is passed into the apply RPC so the apps row
+      // reflects the fresh check, not the value the creator submitted with.
+      let safeBrowsingPassed = null
+      let safeBrowsingThreats = null
       if (urlChanged) {
         const safety = await checkUrlSafety(selected.url)
         if (safety.error) {
@@ -987,71 +990,33 @@ function EditsPanel() {
         }
         // Pass only on a real clean verdict — a skipped/degraded check is
         // recorded as a non-pass so the row's badge reflects the truth.
-        safeFields = {
-          safe_browsing_passed: safety.safe === true && !safety.skipped,
-          safe_browsing_threats: safety.threats || [],
-        }
+        safeBrowsingPassed = safety.safe === true && !safety.skipped
+        safeBrowsingThreats = safety.threats || []
       }
 
-      // Build the apps update payload from the edit row.
-      const appsUpdate = {
-        title: selected.title,
-        tagline: selected.tagline,
-        description: selected.description,
-        url: selected.url,
-        category: selected.category,
-        tags: selected.tags || [],
-        primary_tool: selected.primary_tool,
-        other_tools: selected.other_tools,
-        demo_video_url: selected.demo_video_url,
-        thumbnail_url: selected.thumbnail_url,
-        screenshot_urls: selected.screenshot_urls || [],
-        slug: selected.slug,
-        submitter_twitter: selected.submitter_twitter,
-        submitter_github: selected.submitter_github,
-        ...safeFields,
-      }
-      // URL change carries a new verification token; preserve existing one
-      // otherwise. ownership_verified survives unless the new URL hasn't been
-      // confirmed yet.
-      if (urlChanged && selected.verification_token) {
-        appsUpdate.verification_token = selected.verification_token
-        appsUpdate.ownership_verified = selected.ownership_verified === true
-      }
-
-      const { error: appsErr } = await supabase
-        .from("apps")
-        .update(appsUpdate)
-        .eq("id", selected.app_id)
-      if (appsErr) {
-        // 23505 = unique_violation. The most likely cause here is the
-        // (user_id, lower(slug)) constraint colliding with another app this
-        // creator now owns at the same slug. Surface a useful message instead
-        // of dumping the raw constraint name.
-        if (appsErr.code === "23505") {
+      // Single SECURITY DEFINER RPC handles both the apps UPDATE and the
+      // app_edits status flip atomically. It also sidesteps column-level
+      // GRANT restrictions on apps (e.g. verification_token, safe_browsing_*)
+      // that block admins from updating those columns directly from the
+      // client — the function runs with the owner's privileges and does its
+      // own admin-role check.
+      const { error: rpcErr } = await supabase.rpc("apply_app_edit", {
+        p_edit_id: selected.id,
+        p_safe_browsing_passed: safeBrowsingPassed,
+        p_safe_browsing_threats: safeBrowsingThreats,
+      })
+      if (rpcErr) {
+        // 23505 = unique_violation. Most likely the (user_id, lower(slug))
+        // constraint colliding with another app this creator now owns at the
+        // same slug. Surface a useful message instead of dumping the raw
+        // constraint name.
+        if (rpcErr.code === "23505") {
           alert(
             `Can't approve — the proposed slug "${selected.slug}" conflicts with another of this creator's apps. Ask them to pick a different slug, or reject this edit.`
           )
           return
         }
-        throw appsErr
-      }
-
-      const { error: editErr } = await supabase
-        .from("app_edits")
-        .update({
-          status: "approved",
-          reviewed_by: user.id,
-          reviewed_at: new Date().toISOString(),
-        })
-        .eq("id", selected.id)
-      if (editErr) {
-        // apps already updated — surface but don't roll back. Admin can mark
-        // approved manually if needed.
-        console.error("Edit-status update failed after apps update:", editErr)
-        alert(
-          `App updated, but failed to mark the edit row approved (${editErr.message}). The change is live; you may need to update the edit status manually.`
-        )
+        throw rpcErr
       }
 
       sendEmail("edit_approved", { id: selected.app_id }, { editId: selected.id })
