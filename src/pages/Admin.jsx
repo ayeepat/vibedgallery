@@ -7,7 +7,7 @@ import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import { sanitizeSearchTerm } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
-import { Loader2, Check, X, ExternalLink, Search, ShieldCheck, Flag } from "lucide-react";
+import { Loader2, Check, X, ExternalLink, Search, ShieldCheck, Flag, Pencil } from "lucide-react";
 
 const STATUS_COLORS = {
   pending_verification: "#717171",
@@ -27,7 +27,7 @@ export default function Admin() {
   // Route-level <ProtectedRoute adminOnly> already guarantees the caller is
   // signed-in AND admin before this component mounts — no need to re-check.
   const { user } = useAuth()
-  const [section, setSection] = useState("queue") // "queue" | "reports"
+  const [section, setSection] = useState("queue") // "queue" | "edits" | "reports"
   const [apps, setApps] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("pending_review")
@@ -181,12 +181,20 @@ export default function Admin() {
         }
       }
 
+      // ownership_verified reflects the LATEST server-side verifyHtml outcome
+      // only. We don't OR with the existing row value: that path used to
+      // preserve a stale `true` set by another caller, which was exploitable
+      // when an admin force-approved over a currently-failing check.
+      //
+      // The previous-row sticky behavior is still safe in the no-token branch
+      // because `result.verified` is initialized to `true` above for rows
+      // without a verification_token/url — those rows never go through
+      // verifyHtml in the first place.
       const { error } = await supabase
         .from("apps")
         .update({
           status: "approved",
-          // Never downgrade a previously-verified row when force-approving.
-          ownership_verified: result.verified || app.ownership_verified === true,
+          ownership_verified: result.verified === true,
           reviewed_by: user.id,
           reviewed_at: new Date().toISOString(),
         })
@@ -256,11 +264,11 @@ export default function Admin() {
             className="text-3xl font-black uppercase leading-none"
             style={{ letterSpacing: "-0.04em" }}
           >
-            {section === "reports" ? "REPORTS." : "REVIEW QUEUE."}
+            {section === "reports" ? "REPORTS." : section === "edits" ? "EDITS." : "REVIEW QUEUE."}
           </h1>
         </div>
 
-        {/* Section switcher — queue vs reports */}
+        {/* Section switcher — queue vs edits vs reports */}
         <div className="border-b border-[#E5E5E5] flex">
           <button
             onClick={() => setSection("queue")}
@@ -269,6 +277,14 @@ export default function Admin() {
             }`}
           >
             Queue
+          </button>
+          <button
+            onClick={() => setSection("edits")}
+            className={`h-10 px-6 text-[10px] font-bold uppercase tracking-widest border-r border-[#E5E5E5] transition-colors inline-flex items-center gap-2 ${
+              section === "edits" ? "bg-black text-white" : "text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
+            }`}
+          >
+            <Pencil className="w-3 h-3" /> Edits
           </button>
           <button
             onClick={() => setSection("reports")}
@@ -280,7 +296,7 @@ export default function Admin() {
           </button>
         </div>
 
-        {section === "reports" ? <ReportsPanel /> : <>
+        {section === "reports" ? <ReportsPanel /> : section === "edits" ? <EditsPanel /> : <>
         {/* Search — admins search across ALL statuses */}
         <div className="border-b border-[#E5E5E5] px-8 py-3 flex items-center gap-3">
           <Search className="w-4 h-4 text-[#717171] shrink-0" />
@@ -774,4 +790,559 @@ function ReportsPanel() {
       )}
     </div>
   )
+}
+
+// ─── Edits queue — pending creator edits to approved apps ─────────────
+// Master/detail layout mirroring the main queue. The detail panel shows ONLY
+// fields that differ between the current apps row and the proposed edit, with
+// the previous value and the proposed value side-by-side. Approve copies the
+// edit fields onto the apps row and marks the edit approved; reject just
+// stamps the rejection reason. Live apps row is not touched on reject.
+
+const EDIT_STATUS_LABELS = {
+  pending_verification: "Pending Verification",
+  pending_review: "Pending Review",
+  approved: "Approved",
+  rejected: "Rejected",
+}
+
+// The editable subset of apps that the diff cares about, in display order.
+const DIFF_FIELDS = [
+  { key: "title",            label: "Title",          kind: "text" },
+  { key: "tagline",          label: "Tagline",        kind: "text" },
+  { key: "description",      label: "Description",    kind: "longtext" },
+  { key: "url",              label: "URL",            kind: "url" },
+  { key: "category",         label: "Category",       kind: "text" },
+  { key: "tags",             label: "Tags",           kind: "array" },
+  { key: "primary_tool",     label: "Primary Tool",   kind: "text" },
+  { key: "other_tools",      label: "Other Tools",    kind: "text" },
+  { key: "demo_video_url",   label: "Demo Video",     kind: "url" },
+  { key: "slug",             label: "Slug",           kind: "text" },
+  { key: "submitter_twitter",label: "Twitter",        kind: "text" },
+  { key: "submitter_github", label: "GitHub",         kind: "url" },
+  { key: "thumbnail_url",    label: "Thumbnail",      kind: "image" },
+  { key: "screenshot_urls",  label: "Screenshots",    kind: "imagelist" },
+]
+
+// Equality used for the diff. Arrays compare element-by-element; null and ""
+// are treated as the same "no value" so the admin doesn't see a noise diff
+// for an optional field a creator never set.
+function valuesEqual(a, b) {
+  const empty = (v) => v == null || v === ""
+  if (empty(a) && empty(b)) return true
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const aa = Array.isArray(a) ? a : []
+    const bb = Array.isArray(b) ? b : []
+    if (aa.length !== bb.length) return false
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false
+    return true
+  }
+  return a === b
+}
+
+function ValueCell({ value, kind }) {
+  if (value == null || value === "" || (Array.isArray(value) && value.length === 0)) {
+    return <span className="text-[10px] text-[#AAAAAA] italic">— empty —</span>
+  }
+  if (kind === "array") {
+    return (
+      <div className="flex flex-wrap gap-1">
+        {value.map((t) => (
+          <span key={t} className="text-[10px] border border-[#E5E5E5] px-2 py-0.5">{t}</span>
+        ))}
+      </div>
+    )
+  }
+  if (kind === "image") {
+    return (
+      <div className="border border-[#E5E5E5] aspect-video w-48 overflow-hidden">
+        <img src={value} alt="" className="w-full h-full object-cover" />
+      </div>
+    )
+  }
+  if (kind === "imagelist") {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        {value.map((u, i) => (
+          <div key={i} className="border border-[#E5E5E5] aspect-video overflow-hidden">
+            <img src={u} alt="" className="w-full h-full object-cover" />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  if (kind === "url") {
+    return (
+      <a href={value} target="_blank" rel="noopener noreferrer" className="text-xs text-black hover:underline break-all inline-flex items-center gap-1">
+        {value} <ExternalLink className="w-3 h-3 shrink-0" />
+      </a>
+    )
+  }
+  if (kind === "longtext") {
+    return <p className="text-xs text-black leading-relaxed whitespace-pre-wrap break-words">{value}</p>
+  }
+  return <span className="text-xs text-black break-all">{value}</span>
+}
+
+function EditsPanel() {
+  const { user } = useAuth()
+  const [edits, setEdits] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState(null) // joined row: edit + apps (current)
+  const [filter, setFilter] = useState("pending_review")
+  const [rejectionReason, setRejectionReason] = useState("")
+  const [actionLoading, setActionLoading] = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
+  const [recheckLoading, setRecheckLoading] = useState(false)
+
+  const fetchEdits = async () => {
+    setLoading(true)
+    // Embed the live apps row so the diff has both sides in one round-trip.
+    // PostgREST resolves app_edits.app_id -> apps.id via the FK we declared.
+    const { data, error } = await supabase
+      .from("app_edits")
+      .select(`
+        id, app_id, user_id, status, created_at, reviewed_at, reviewed_by,
+        rejection_reason, verification_token, ownership_verified,
+        safe_browsing_passed, safe_browsing_threats,
+        title, tagline, description, url, category, tags,
+        primary_tool, other_tools, demo_video_url,
+        thumbnail_url, screenshot_urls, slug,
+        submitter_twitter, submitter_github,
+        apps:app_id (
+          id, title, tagline, description, url, category, tags,
+          primary_tool, other_tools, demo_video_url,
+          thumbnail_url, screenshot_urls, slug,
+          submitter_twitter, submitter_github,
+          verification_token, ownership_verified, status
+        )
+      `)
+      .in("status", filter === "all"
+        ? ["pending_verification", "pending_review", "approved", "rejected"]
+        : [filter])
+      .order("created_at", { ascending: false })
+      .limit(200)
+    if (!error) setEdits(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchEdits()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter])
+
+  // Compute the diff list — only fields that actually changed.
+  const diff = selected
+    ? DIFF_FIELDS
+        .map((f) => ({ ...f, prev: selected.apps?.[f.key], next: selected[f.key] }))
+        .filter((f) => !valuesEqual(f.prev, f.next))
+    : []
+
+  const urlChanged = selected && selected.apps && normalizeNullable(selected.url) !== normalizeNullable(selected.apps.url)
+
+  const handleRecheck = async () => {
+    if (!selected?.verification_token || !selected?.url) {
+      setVerifyResult({ verified: false, reason: "Missing token or url", checked: [] })
+      return
+    }
+    setRecheckLoading(true)
+    setVerifyResult(null)
+    try {
+      const result = await verifyHtml(selected.url, selected.verification_token)
+      setVerifyResult(result)
+      if (result.verified && !selected.ownership_verified) {
+        await supabase
+          .from("app_edits")
+          .update({ ownership_verified: true })
+          .eq("id", selected.id)
+        setSelected((s) => s ? { ...s, ownership_verified: true } : s)
+        setEdits((prev) => prev.map((e) => e.id === selected.id ? { ...e, ownership_verified: true } : e))
+      }
+    } catch (err) {
+      setVerifyResult({ verified: false, reason: err?.message || "Check failed", checked: [] })
+    } finally {
+      setRecheckLoading(false)
+    }
+  }
+
+  const handleApprove = async () => {
+    if (!selected) return
+    setActionLoading(true)
+    try {
+      // If URL changed, re-run Safe Browsing on the new URL before we commit it
+      // to the live apps row. If we can't reach it, prompt rather than block.
+      let safeFields = {}
+      if (urlChanged) {
+        const safety = await checkUrlSafety(selected.url)
+        if (safety.error) {
+          const proceed = window.confirm(
+            `Could not re-check URL safety (${safety.error}).\n\nApprove anyway?`
+          )
+          if (!proceed) { setActionLoading(false); return }
+        } else if (!safety.safe && !safety.skipped) {
+          const proceed = window.confirm(
+            `⚠ New URL flagged UNSAFE: ${(safety.threats || []).join(", ")}\n${selected.url}\n\nApprove anyway?`
+          )
+          if (!proceed) { setActionLoading(false); return }
+        }
+        // Pass only on a real clean verdict — a skipped/degraded check is
+        // recorded as a non-pass so the row's badge reflects the truth.
+        safeFields = {
+          safe_browsing_passed: safety.safe === true && !safety.skipped,
+          safe_browsing_threats: safety.threats || [],
+        }
+      }
+
+      // Build the apps update payload from the edit row.
+      const appsUpdate = {
+        title: selected.title,
+        tagline: selected.tagline,
+        description: selected.description,
+        url: selected.url,
+        category: selected.category,
+        tags: selected.tags || [],
+        primary_tool: selected.primary_tool,
+        other_tools: selected.other_tools,
+        demo_video_url: selected.demo_video_url,
+        thumbnail_url: selected.thumbnail_url,
+        screenshot_urls: selected.screenshot_urls || [],
+        slug: selected.slug,
+        submitter_twitter: selected.submitter_twitter,
+        submitter_github: selected.submitter_github,
+        ...safeFields,
+      }
+      // URL change carries a new verification token; preserve existing one
+      // otherwise. ownership_verified survives unless the new URL hasn't been
+      // confirmed yet.
+      if (urlChanged && selected.verification_token) {
+        appsUpdate.verification_token = selected.verification_token
+        appsUpdate.ownership_verified = selected.ownership_verified === true
+      }
+
+      const { error: appsErr } = await supabase
+        .from("apps")
+        .update(appsUpdate)
+        .eq("id", selected.app_id)
+      if (appsErr) {
+        // 23505 = unique_violation. The most likely cause here is the
+        // (user_id, lower(slug)) constraint colliding with another app this
+        // creator now owns at the same slug. Surface a useful message instead
+        // of dumping the raw constraint name.
+        if (appsErr.code === "23505") {
+          alert(
+            `Can't approve — the proposed slug "${selected.slug}" conflicts with another of this creator's apps. Ask them to pick a different slug, or reject this edit.`
+          )
+          return
+        }
+        throw appsErr
+      }
+
+      const { error: editErr } = await supabase
+        .from("app_edits")
+        .update({
+          status: "approved",
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", selected.id)
+      if (editErr) {
+        // apps already updated — surface but don't roll back. Admin can mark
+        // approved manually if needed.
+        console.error("Edit-status update failed after apps update:", editErr)
+        alert(
+          `App updated, but failed to mark the edit row approved (${editErr.message}). The change is live; you may need to update the edit status manually.`
+        )
+      }
+
+      sendEmail("edit_approved", { id: selected.app_id }, { editId: selected.id })
+
+      setEdits((prev) => prev.filter((e) => e.id !== selected.id))
+      setSelected(null)
+      setRejectionReason("")
+      setVerifyResult(null)
+    } catch (err) {
+      console.error(err)
+      alert(`Failed to approve edit: ${err?.message || err}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleReject = async () => {
+    if (!selected) return
+    if (!rejectionReason.trim()) {
+      alert("Please provide a rejection reason")
+      return
+    }
+    setActionLoading(true)
+    try {
+      const { error } = await supabase
+        .from("app_edits")
+        .update({
+          status: "rejected",
+          rejection_reason: rejectionReason,
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", selected.id)
+      if (error) throw error
+
+      sendEmail("edit_rejected", { id: selected.app_id }, { editId: selected.id, rejectionReason })
+
+      setEdits((prev) => prev.filter((e) => e.id !== selected.id))
+      setSelected(null)
+      setRejectionReason("")
+    } catch (err) {
+      console.error(err)
+      alert(`Failed to reject edit: ${err?.message || err}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  return (
+    <>
+      {/* Filter tabs */}
+      <div className="border-b border-[#E5E5E5] flex">
+        {Object.entries(EDIT_STATUS_LABELS).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => { setFilter(key); setSelected(null); setVerifyResult(null) }}
+            className={`h-12 px-6 text-[10px] font-bold uppercase tracking-widest border-r border-[#E5E5E5] transition-colors ${
+              filter === key
+                ? "bg-black text-white"
+                : "bg-white text-[#717171] hover:text-black hover:bg-[#F5F5F5]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex h-[calc(100vh-220px)]">
+        {/* Edit list */}
+        <div className="w-[40%] border-r border-[#E5E5E5] overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-32">
+              <Loader2 className="w-5 h-5 animate-spin text-[#717171]" />
+            </div>
+          ) : edits.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+                No edits in this category
+              </p>
+            </div>
+          ) : (
+            edits.map((edit) => (
+              <button
+                key={edit.id}
+                onClick={() => { setSelected(edit); setRejectionReason(""); setVerifyResult(null) }}
+                className={`w-full text-left border-b border-[#E5E5E5] p-4 hover:bg-[#F5F5F5] transition-colors ${
+                  selected?.id === edit.id ? "bg-[#F5F5F5]" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black uppercase tracking-tight text-black truncate">
+                      {edit.apps?.title || edit.title}
+                    </p>
+                    <p className="text-[10px] text-[#717171] truncate mt-0.5">
+                      Editing: {edit.title}
+                    </p>
+                    <p className="text-[9px] text-[#AAAAAA] mt-1">
+                      {new Date(edit.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <span
+                    className="shrink-0 text-[8px] font-bold uppercase tracking-widest px-2 py-1"
+                    style={{
+                      color: STATUS_COLORS[edit.status],
+                      border: `1px solid ${STATUS_COLORS[edit.status]}44`,
+                      background: `${STATUS_COLORS[edit.status]}11`,
+                    }}
+                  >
+                    {EDIT_STATUS_LABELS[edit.status]}
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Detail panel */}
+        <div className="flex-1 overflow-y-auto">
+          {!selected ? (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+                Select an edit to review
+              </p>
+            </div>
+          ) : (
+            <div className="p-8">
+              <div className="mb-6">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171] mb-2">
+                  Edit on
+                </p>
+                <h2 className="text-2xl font-black uppercase leading-none mb-2" style={{ letterSpacing: "-0.04em" }}>
+                  {selected.apps?.title || selected.title}
+                </h2>
+                <p className="text-[10px] text-[#AAAAAA]">
+                  Submitted {new Date(selected.created_at).toLocaleString()}
+                </p>
+              </div>
+
+              {urlChanged && (
+                <div className="border border-[#E5E5E5] mb-4 px-4 py-3 bg-[#FFF8E6]">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-black">
+                    ⚠ URL changed — re-run verification on the new URL before approving
+                  </p>
+                  <p className="text-[10px] text-[#717171] mt-1">
+                    Verification token: <span className="font-mono">{selected.verification_token || "—"}</span>
+                  </p>
+                  <p className="text-[10px] text-[#717171] mt-0.5">
+                    Ownership: {selected.ownership_verified ? "Verified ✓" : "Not yet verified"}
+                  </p>
+                </div>
+              )}
+
+              {diff.length === 0 ? (
+                <div className="border border-[#E5E5E5] p-6 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
+                    No changes detected vs. live values
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-[#E5E5E5] mb-6">
+                  <div className="px-4 py-3 border-b border-[#E5E5E5] bg-[#F5F5F5]">
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+                      Changes ({diff.length})
+                    </span>
+                  </div>
+                  {diff.map((f) => (
+                    <div key={f.key} className="border-b border-[#E5E5E5] last:border-0">
+                      <div className="px-4 py-2 bg-[#FAFAFA] border-b border-[#E5E5E5]">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-black">
+                          {f.label}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 divide-x divide-[#E5E5E5]">
+                        <div className="px-4 py-3">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-2">
+                            Previous
+                          </p>
+                          <ValueCell value={f.prev} kind={f.kind} />
+                        </div>
+                        <div className="px-4 py-3 bg-[#F5FAF5]">
+                          <p className="text-[9px] font-bold uppercase tracking-widest text-[#2D5016] mb-2">
+                            Proposed
+                          </p>
+                          <ValueCell value={f.next} kind={f.kind} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Verify result */}
+              {verifyResult && (
+                <div
+                  className="px-4 py-3 border border-[#E5E5E5] mb-4"
+                  style={{
+                    color: verifyResult.verified ? STATUS_COLORS.approved : STATUS_COLORS.rejected,
+                    background: verifyResult.verified ? `${STATUS_COLORS.approved}11` : `${STATUS_COLORS.rejected}11`,
+                  }}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-widest">
+                    {verifyResult.verified
+                      ? `✓ Ownership file verified at new URL (${verifyResult.method})`
+                      : `⚠ Ownership file not found — ${verifyResult.reason || "no match"}`}
+                  </p>
+                </div>
+              )}
+
+              {/* Only show actions on still-pending edits */}
+              {(selected.status === "pending_review" || selected.status === "pending_verification") && (
+                <div className="border border-[#E5E5E5]">
+                  <div className="border-b border-[#E5E5E5]">
+                    <div className="flex items-center justify-between px-4 pt-3">
+                      <label className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+                        Rejection Reason (required if rejecting)
+                      </label>
+                      <span
+                        className={`text-[9px] font-bold uppercase tracking-widest tabular-nums ${
+                          rejectionReason.length > 1900 ? "text-red-600" : "text-[#AAAAAA]"
+                        }`}
+                      >
+                        {rejectionReason.length} / 2000
+                      </span>
+                    </div>
+                    <textarea
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value.slice(0, 2000))}
+                      maxLength={2000}
+                      placeholder="Tell the creator why their edit was rejected..."
+                      rows={3}
+                      className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none resize-none"
+                    />
+                  </div>
+
+                  {urlChanged && selected.verification_token && selected.url && (
+                    <button
+                      onClick={handleRecheck}
+                      disabled={recheckLoading || actionLoading}
+                      className="w-full h-12 flex items-center justify-center gap-2 bg-white text-black hover:bg-[#F5F5F5] transition-colors border-b border-[#E5E5E5] disabled:opacity-50"
+                    >
+                      {recheckLoading
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <ShieldCheck className="w-3.5 h-3.5" />
+                      }
+                      <span className="text-[10px] font-bold uppercase tracking-widest">
+                        {recheckLoading ? "Checking..." : "Re-run Verification On New URL"}
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="flex">
+                    <button
+                      onClick={handleApprove}
+                      disabled={actionLoading || recheckLoading}
+                      className="flex-1 h-14 flex items-center justify-center gap-2 bg-black text-white hover:bg-[#222] transition-colors border-r border-[#333] disabled:opacity-50"
+                    >
+                      {actionLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Check className="w-4 h-4" />
+                      }
+                      <span className="text-[10px] font-bold uppercase tracking-widest">
+                        Approve Edit
+                      </span>
+                    </button>
+                    <button
+                      onClick={handleReject}
+                      disabled={actionLoading || recheckLoading}
+                      className="flex-1 h-14 flex items-center justify-center gap-2 bg-white text-black hover:bg-[#F5F5F5] transition-colors disabled:opacity-50"
+                    >
+                      {actionLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <X className="w-4 h-4" />
+                      }
+                      <span className="text-[10px] font-bold uppercase tracking-widest">
+                        Reject Edit
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// Treat null/empty/whitespace as the same "no value" when checking URL change.
+function normalizeNullable(v) {
+  if (v == null) return ""
+  return String(v).trim()
 }

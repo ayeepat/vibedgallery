@@ -166,7 +166,7 @@ function SavedTab({ userId }) {
   );
 }
 
-function SubmissionCard({ app, onAction, loading }) {
+function SubmissionCard({ app, onAction, loading, hasPendingEdit }) {
   const config = STATUS_CONFIG[app.status] || STATUS_CONFIG.pending_verification;
 
   return (
@@ -237,15 +237,31 @@ function SubmissionCard({ app, onAction, loading }) {
         )}
 
         {app.status === "approved" && (
-          <button
-            onClick={() => onAction("view", app)}
-            className="h-10 px-4 flex items-center justify-between bg-black text-white hover:bg-[#222] transition-colors"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest">
-              View in Gallery
-            </span>
-            <span className="text-xs text-[#888]">→</span>
-          </button>
+          <>
+            {hasPendingEdit && (
+              <p className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-[#717171] bg-[#FAFAFA] border-b border-[#E5E5E5]">
+                ✎ Edit pending review
+              </p>
+            )}
+            <button
+              onClick={() => onAction("view", app)}
+              className="h-10 px-4 flex items-center justify-between bg-black text-white hover:bg-[#222] transition-colors"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest">
+                View in Gallery
+              </span>
+              <span className="text-xs text-[#888]">→</span>
+            </button>
+            <button
+              onClick={() => onAction("edit", app)}
+              className="h-10 px-4 flex items-center justify-between bg-white text-black hover:bg-[#F5F5F5] transition-colors border-t border-[#E5E5E5]"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-widest">
+                {hasPendingEdit ? "Update Pending Edit" : "Edit"}
+              </span>
+              <span className="text-xs text-[#888]">→</span>
+            </button>
+          </>
         )}
 
         {app.status === "rejected" && (
@@ -289,6 +305,7 @@ export default function Profile() {
 
   const [activeTab, setActiveTab] = useState("account");
   const [submissions, setSubmissions] = useState([]);
+  const [pendingEditAppIds, setPendingEditAppIds] = useState(() => new Set());
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
 
@@ -368,15 +385,22 @@ export default function Profile() {
     if (!user) return;
     setLoadingSubmissions(true);
     try {
-      const { data, error } = await supabase
-        .from("apps")
-        .select(APP_SELECT_COLUMNS)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const [{ data, error }, { data: edits }] = await Promise.all([
+        supabase
+          .from("apps")
+          .select(APP_SELECT_COLUMNS)
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("app_edits")
+          .select("app_id")
+          .in("status", ["pending_verification", "pending_review"]),
+      ]);
 
       if (!error) {
         setSubmissions(data || []);
       }
+      setPendingEditAppIds(new Set((edits || []).map((e) => e.app_id)));
     } catch (err) {
       console.error("Error fetching submissions:", err);
     }
@@ -527,6 +551,8 @@ export default function Profile() {
       } else if (action === "view") {
         // Owner's own approved app — build the pretty URL from their handle.
         navigate(appPath(app, profile?.username));
+      } else if (action === "edit") {
+        navigate(`/edit/${app.id}`);
       } else if (action === "resubmit") {
         navigate(`/submit?app_id=${app.id}`);
       }
@@ -752,6 +778,7 @@ export default function Profile() {
                       app={app}
                       onAction={handleSubmissionAction}
                       loading={actionLoading}
+                      hasPendingEdit={pendingEditAppIds.has(app.id)}
                     />
                   </motion.div>
                 ))}

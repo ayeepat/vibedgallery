@@ -484,7 +484,11 @@ export default function Submit() {
         }
       }
 
-      // Safe browsing check
+      // Safe browsing check. Only a REAL threat verdict (safe:false &&
+      // !skipped) blocks the submission — a skipped/degraded check (key
+      // missing, upstream outage) is recorded as a non-pass and surfaced in
+      // the admin queue, but does not trap the submitter (manual review is
+      // the backstop).
       const safety = await checkUrlSafety(appUrl);
 
       if (safety.error) {
@@ -495,7 +499,7 @@ export default function Submit() {
         return;
       }
 
-      if (!safety.safe) {
+      if (!safety.safe && !safety.skipped) {
         setGlobalError(
           `This URL was flagged as unsafe: ${safety.threats.join(", ")}. We cannot accept this submission.`
         );
@@ -584,7 +588,10 @@ export default function Submit() {
           thumbnail_url: thumbnailUrl,
           screenshot_urls: screenshotUrls,
           verification_token: token,
-          safe_browsing_passed: safety.safe,
+          // Pass only when the check returned a real clean verdict — a
+          // skipped/degraded result is NOT a pass, so the admin queue
+          // accurately shows which submissions bypassed Safe Browsing.
+          safe_browsing_passed: safety.safe === true && !safety.skipped,
           safe_browsing_threats: safety.threats,
           status: "pending_verification",
         })
@@ -637,15 +644,18 @@ export default function Submit() {
     }
   };
 
-  // User claims the file is deployed. We still transition to pending_review
-  // (admin re-runs verify-html before approving) but optimistically mark
-  // ownership_verified so the queue tile reads correctly.
+  // User claims the file is deployed. We only flip status to pending_review —
+  // ownership_verified is intentionally NOT set here. The client cannot prove
+  // ownership; only the admin's server-side verify-html result is trusted to
+  // flip that flag. Setting it from the client created a verified-badge
+  // spoofing path where a force-approve over a failing verifyHtml kept the
+  // self-claimed `true` (see Admin.jsx handleApprove).
   const handleVerificationDone = async () => {
     setLoading(true);
     try {
       const { error } = await supabase
         .from("apps")
-        .update({ ownership_verified: true, status: "pending_review" })
+        .update({ status: "pending_review" })
         .eq("id", submittedAppId);
       if (error) throw error;
       setStep("success");

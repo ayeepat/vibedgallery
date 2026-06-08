@@ -7,15 +7,19 @@
 //   - "approved"                : tell the submitter their app is live
 //   - "rejected"                : tell the submitter why it was rejected
 //   - "report_notification"     : alert the admin that an app was reported
+//   - "edit_submitted"          : alert the admin that a creator proposed an edit
+//   - "edit_approved"           : tell the creator their edit went live
+//   - "edit_rejected"           : tell the creator their edit was rejected
 //
 // Hard rules (vs. older version which trusted body fields):
 //   - JWT is enforced (verify_jwt=true in config.toml).
 //   - The recipient is NEVER read from the body — it's always derived
 //     server-side from auth.users via the app row, so a signed-in attacker
 //     cannot use this endpoint to spam arbitrary addresses.
-//   - "submission_confirmation" / "admin_notification" require the caller
-//     to own the referenced app (i.e. apps.user_id = auth.uid()).
-//   - "approved" / "rejected" require the caller's profiles.role = 'admin'.
+//   - "submission_confirmation" / "admin_notification" / "edit_submitted"
+//     require the caller to own the referenced app.
+//   - "approved" / "rejected" / "edit_approved" / "edit_rejected" require the
+//     caller's profiles.role = 'admin'.
 //
 // Required secrets (set via `supabase secrets set`):
 //   - RESEND_API_KEY  : your Resend API key
@@ -43,7 +47,10 @@ type EmailType =
   | "admin_notification"
   | "approved"
   | "rejected"
-  | "report_notification";
+  | "report_notification"
+  | "edit_submitted"
+  | "edit_approved"
+  | "edit_rejected";
 
 interface Payload {
   type: EmailType;
@@ -54,6 +61,9 @@ interface Payload {
   // content into the admin inbox.
   reason?: string;
   category?: string;
+  // edit_submitted / edit_approved / edit_rejected: which app_edits row this
+  // email is about. We re-fetch it server-side and never trust body values.
+  editId?: string;
 }
 
 interface AppRow {
@@ -61,10 +71,110 @@ interface AppRow {
   user_id: string;
   title: string;
   tagline: string | null;
+  description: string | null;
   url: string | null;
   category: string | null;
+  tags: string[] | null;
   primary_tool: string | null;
+  other_tools: string | null;
+  demo_video_url: string | null;
+  thumbnail_url: string | null;
+  screenshot_urls: string[] | null;
+  slug: string | null;
+  submitter_twitter: string | null;
+  submitter_github: string | null;
   submitter_email: string | null;
+}
+
+interface EditRow {
+  id: string;
+  app_id: string;
+  user_id: string;
+  status: string;
+  title: string;
+  tagline: string | null;
+  description: string | null;
+  url: string | null;
+  category: string | null;
+  tags: string[] | null;
+  primary_tool: string | null;
+  other_tools: string | null;
+  demo_video_url: string | null;
+  thumbnail_url: string | null;
+  screenshot_urls: string[] | null;
+  slug: string | null;
+  submitter_twitter: string | null;
+  submitter_github: string | null;
+  verification_token: string | null;
+  ownership_verified: boolean;
+}
+
+// Editable fields the diff summary covers. Mirror of DIFF_FIELDS in Admin.jsx.
+const DIFF_FIELDS: Array<{ key: keyof EditRow & keyof AppRow; label: string }> = [
+  { key: "title",             label: "Title" },
+  { key: "tagline",           label: "Tagline" },
+  { key: "description",       label: "Description" },
+  { key: "url",               label: "URL" },
+  { key: "category",          label: "Category" },
+  { key: "tags",              label: "Tags" },
+  { key: "primary_tool",      label: "Primary Tool" },
+  { key: "other_tools",       label: "Other Tools" },
+  { key: "demo_video_url",    label: "Demo Video" },
+  { key: "slug",              label: "Slug" },
+  { key: "submitter_twitter", label: "Twitter" },
+  { key: "submitter_github",  label: "GitHub" },
+  { key: "thumbnail_url",     label: "Thumbnail" },
+  { key: "screenshot_urls",   label: "Screenshots" },
+];
+
+function valEmpty(v: unknown): boolean {
+  return v == null || v === "" || (Array.isArray(v) && v.length === 0);
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (valEmpty(a) && valEmpty(b)) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const aa = Array.isArray(a) ? a : [];
+    const bb = Array.isArray(b) ? b : [];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+  return a === b;
+}
+
+function formatValueForEmail(v: unknown): string {
+  if (valEmpty(v)) return "<em>empty</em>";
+  if (Array.isArray(v)) return esc(v.join(", "));
+  return esc(String(v));
+}
+
+// Build an HTML table of changes for the admin "edit_submitted" notification.
+function renderDiffTable(prev: AppRow, next: EditRow): string {
+  const rows = DIFF_FIELDS
+    .filter((f) => !valuesEqual(prev[f.key], next[f.key]))
+    .map((f) => `
+      <tr>
+        <td style="padding:6px 10px;border:1px solid #E5E5E5;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#717171;vertical-align:top;width:120px;">${esc(f.label)}</td>
+        <td style="padding:6px 10px;border:1px solid #E5E5E5;font-size:12px;color:#717171;vertical-align:top;">${formatValueForEmail(prev[f.key])}</td>
+        <td style="padding:6px 10px;border:1px solid #E5E5E5;font-size:12px;color:#000;vertical-align:top;background:#F5FAF5;">${formatValueForEmail(next[f.key])}</td>
+      </tr>
+    `).join("");
+  if (!rows) {
+    return `<p style="font-size:12px;color:#717171;">No field changes detected.</p>`;
+  }
+  return `
+    <table style="border-collapse:collapse;width:100%;margin-top:8px;">
+      <thead>
+        <tr>
+          <th style="padding:6px 10px;border:1px solid #E5E5E5;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#AAAAAA;text-align:left;">Field</th>
+          <th style="padding:6px 10px;border:1px solid #E5E5E5;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#AAAAAA;text-align:left;">Previous</th>
+          <th style="padding:6px 10px;border:1px solid #E5E5E5;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#2D5016;text-align:left;background:#F5FAF5;">Proposed</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function html(title: string, body: string): string {
@@ -135,7 +245,7 @@ Deno.serve(async (req) => {
     // the body for the recipient.
     const { data: appRow, error: appErr } = await admin
       .from("apps")
-      .select("id, user_id, title, tagline, url, category, primary_tool, submitter_email")
+      .select("id, user_id, title, tagline, description, url, category, tags, primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, slug, submitter_twitter, submitter_github, submitter_email")
       .eq("id", appId)
       .maybeSingle<AppRow>();
     if (appErr) {
@@ -150,7 +260,8 @@ Deno.serve(async (req) => {
     // Per-type authorization.
     const callerOwnsApp = appRow.user_id === callerId;
     let callerIsAdmin = false;
-    if (payload.type === "approved" || payload.type === "rejected") {
+    const adminOnlyTypes = new Set(["approved", "rejected", "edit_approved", "edit_rejected"]);
+    if (adminOnlyTypes.has(payload.type)) {
       const { data: profile } = await admin
         .from("profiles")
         .select("role")
@@ -164,14 +275,43 @@ Deno.serve(async (req) => {
       // is approved before we got here — we just need the bearer token to be
       // valid, which getUser() above confirmed.
     } else {
-      // submission_confirmation / admin_notification: must be the app owner.
+      // submission_confirmation / admin_notification / edit_submitted:
+      // must be the app owner.
       if (!callerOwnsApp) return jsonResp({ error: "Not your app" }, 403);
+    }
+
+    // Look up the edit row server-side for edit_* types. We never trust the
+    // body for content — only the editId, which we re-fetch with full data.
+    let editRow: EditRow | null = null;
+    if (
+      payload.type === "edit_submitted"
+      || payload.type === "edit_approved"
+      || payload.type === "edit_rejected"
+    ) {
+      if (!payload.editId) return jsonResp({ error: "Missing editId" }, 400);
+      const { data: ed, error: edErr } = await admin
+        .from("app_edits")
+        .select("id, app_id, user_id, status, title, tagline, description, url, category, tags, primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, slug, submitter_twitter, submitter_github, verification_token, ownership_verified")
+        .eq("id", payload.editId)
+        .maybeSingle<EditRow>();
+      if (edErr) {
+        console.error("send-email: edit lookup failed", edErr.message);
+        return jsonResp({ error: "Edit lookup failed" }, 500);
+      }
+      if (!ed) return jsonResp({ error: "Edit not found" }, 404);
+      // The edit must belong to the app we're notifying about — defense in depth.
+      if (ed.app_id !== appRow.id) return jsonResp({ error: "Edit does not belong to app" }, 400);
+      editRow = ed;
     }
 
     // Resolve recipient from the app row's submitter_email (set by the
     // apps_set_submitter_email trigger from auth.users at insert time).
     let recipient: string | null = null;
-    if (payload.type === "admin_notification" || payload.type === "report_notification") {
+    if (
+      payload.type === "admin_notification"
+      || payload.type === "report_notification"
+      || payload.type === "edit_submitted"
+    ) {
       if (!ADMIN_EMAIL) return jsonResp({ error: "ADMIN_EMAIL not set" }, 500);
       recipient = ADMIN_EMAIL;
     } else {
@@ -223,6 +363,36 @@ Deno.serve(async (req) => {
           <p>Thanks for submitting <strong>${esc(title)}</strong>. After review, we weren't able to approve it this time.</p>
           ${reason ? `<p style="font-size:12px;color:#717171;border-left:3px solid #E5E5E5;padding-left:12px;">${esc(reason)}</p>` : ""}
           <p>You're welcome to address the feedback and submit again.</p>
+        `);
+        break;
+      }
+      case "edit_submitted": {
+        if (!editRow) return jsonResp({ error: "Edit row missing" }, 500);
+        subject = `Edit pending review — ${title}`;
+        const diffHtml = renderDiffTable(appRow, editRow);
+        const urlChanged = (editRow.url ?? "") !== (appRow.url ?? "");
+        body = html("EDIT PROPOSED.", `
+          <p>The creator of <strong>${esc(title)}</strong> submitted an edit for review.</p>
+          ${urlChanged ? `<p style="font-size:12px;color:#8B0000;">⚠ URL changed — re-verify ownership on the new URL before approving.</p>` : ""}
+          ${diffHtml}
+          <p style="font-size:12px;color:#AAAAAA;margin-top:16px;">Review and approve / reject in the admin panel → Edits tab.</p>
+        `);
+        break;
+      }
+      case "edit_approved":
+        subject = `Edit approved — ${title} updated`;
+        body = html("EDIT IS LIVE.", `
+          <p>Your edit to <strong>${esc(title)}</strong> has been approved and is now live in the gallery.</p>
+          ${appRow.url ? `<p><a href="${esc(appRow.url)}" style="color:#000;font-weight:700;">View your app →</a></p>` : ""}
+        `);
+        break;
+      case "edit_rejected": {
+        subject = `Edit not approved — ${title}`;
+        const reason = (payload.rejectionReason ?? "").slice(0, 2000);
+        body = html("EDIT UPDATE.", `
+          <p>Thanks for proposing an edit to <strong>${esc(title)}</strong>. After review, we weren't able to approve this round of changes.</p>
+          ${reason ? `<p style="font-size:12px;color:#717171;border-left:3px solid #E5E5E5;padding-left:12px;">${esc(reason)}</p>` : ""}
+          <p>Your app stays live with its current content. You're welcome to revise and submit again.</p>
         `);
         break;
       }
