@@ -65,13 +65,26 @@ export default function Nav({ hideSearch = false }) {
         {/* Right side */}
         <div className="ml-auto flex items-center gap-0">
 
-          {/* Submit App */}
-          <Link
-            to="/submit"
-            className="h-8 px-5 flex items-center bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors whitespace-nowrap"
-          >
-            Submit App
-          </Link>
+          {/* Submit App — on the Submit page itself, this button doubles as the
+              form's submit trigger (form="submit-app-form" associates it with
+              the page's <form id="submit-app-form">). Elsewhere it's a normal
+              link to /submit. */}
+          {pathname === "/submit" ? (
+            <button
+              type="submit"
+              form="submit-app-form"
+              className="h-8 px-5 flex items-center bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors whitespace-nowrap"
+            >
+              Submit App for Review
+            </button>
+          ) : (
+            <Link
+              to="/submit"
+              className="h-8 px-5 flex items-center bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors whitespace-nowrap"
+            >
+              Submit App
+            </Link>
+          )}
 
           {isAuthenticated ? (
             <>
@@ -163,13 +176,25 @@ export default function Nav({ hideSearch = false }) {
           >
             How It Works
           </Link>
-          <Link
-            to="/submit"
-            className="h-12 px-6 flex items-center justify-between bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors"
-          >
-            <span>Submit App</span>
-            <span className="text-[#888]">→</span>
-          </Link>
+          {pathname === "/submit" ? (
+            <button
+              type="submit"
+              form="submit-app-form"
+              onClick={() => setOpen(false)}
+              className="w-full h-12 px-6 flex items-center justify-between bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors text-left"
+            >
+              <span>Submit App for Review</span>
+              <span className="text-[#888]">→</span>
+            </button>
+          ) : (
+            <Link
+              to="/submit"
+              className="h-12 px-6 flex items-center justify-between bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors"
+            >
+              <span>Submit App</span>
+              <span className="text-[#888]">→</span>
+            </Link>
+          )}
 
           {isAuthenticated ? (
             <>

@@ -937,7 +937,7 @@ export default function Submit() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form id="submit-app-form" onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-2 border-b border-[#E5E5E5]">
 
             {/* LEFT */}
@@ -1133,10 +1133,33 @@ export default function Submit() {
                 </div>
               </div>
 
-              {/* Confirmation */}
-              <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Confirmation</span>
-              </div>
+              {/* Confirmation — the section header bar doubles as the submit
+                  button. It sits inert/gray with the label "Confirmation"
+                  until the ownership checkbox is ticked, then flips to black
+                  with the real CTA. */}
+              <button
+                type="submit"
+                disabled={loading || !form.ownershipConfirmed}
+                aria-label={form.ownershipConfirmed ? "Submit app for review" : "Confirm ownership to enable submit"}
+                className={`w-full px-8 py-4 border-y border-[#E5E5E5] flex items-center justify-between transition-colors ${
+                  form.ownershipConfirmed && !loading
+                    ? "bg-black text-white hover:bg-[#222] cursor-pointer"
+                    : "bg-[#F5F5F5] text-[#717171] cursor-not-allowed"
+                }`}
+              >
+                <span className="text-[9px] font-bold uppercase tracking-widest">
+                  {loading
+                    ? "Submitting..."
+                    : form.ownershipConfirmed
+                      ? "Submit App for Review"
+                      : "Confirmation"}
+                </span>
+                {loading
+                  ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : form.ownershipConfirmed
+                    ? <span className="text-sm text-[#888]">→</span>
+                    : null}
+              </button>
               <div className="px-8 py-6 space-y-4">
                 <label className="flex items-start gap-4 cursor-pointer group">
                   <input type="checkbox" checked={form.ownershipConfirmed}
@@ -1148,6 +1171,17 @@ export default function Submit() {
                   </span>
                 </label>
                 <FieldError msg={errors.ownership} />
+
+                {/* Captcha — server-verified before the row is created */}
+                <div className="border border-[#E5E5E5] py-4 flex items-center justify-center">
+                  <Turnstile
+                    action="submit"
+                    innerRef={captchaRef}
+                    onVerify={(t) => setCaptchaToken(t)}
+                    onExpire={() => setCaptchaToken("")}
+                    onError={() => setCaptchaToken("")}
+                  />
+                </div>
 
                 <div className="border border-[#E5E5E5] p-4">
                   <p className="text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-3">What happens next</p>
@@ -1167,50 +1201,25 @@ export default function Submit() {
             </div>
           </div>
 
-          {/* Submit button with progress */}
-          <div className="border-t border-[#E5E5E5]">
-            {loading && uploadProgress && uploadProgress !== "idle" && (
-              <div className="px-8 py-4 bg-[#F5F5F5] border-b border-[#E5E5E5]">
-                <p className="text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
-                  {uploadProgress === "uploading_thumbnail" && "Uploading thumbnail..."}
-                  {uploadProgress === "moderating_thumbnail" && "Checking thumbnail..."}
-                  {uploadProgress.startsWith("uploading_screenshot") && `Uploading ${uploadProgress.replace("uploading_screenshot_", "screenshot ")}`}
-                  {uploadProgress.startsWith("moderating_screenshot") && `Checking ${uploadProgress.replace("moderating_screenshot_", "screenshot ")}`}
-                  {uploadProgress === "inserting_database" && "Finalizing submission..."}
-                </p>
-                <div className="w-full h-1 bg-[#E5E5E5]">
-                  <div 
-                    className="h-full bg-black transition-all"
-                    style={{
-                      width: uploadProgress === "inserting_database" ? "95%" : "60%"
-                    }}
-                  />
-                </div>
+          {loading && uploadProgress && uploadProgress !== "idle" && (
+            <div className="px-8 py-4 bg-[#F5F5F5] border-t border-[#E5E5E5]">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#717171] mb-2">
+                {uploadProgress === "uploading_thumbnail" && "Uploading thumbnail..."}
+                {uploadProgress === "moderating_thumbnail" && "Checking thumbnail..."}
+                {uploadProgress.startsWith("uploading_screenshot") && `Uploading ${uploadProgress.replace("uploading_screenshot_", "screenshot ")}`}
+                {uploadProgress.startsWith("moderating_screenshot") && `Checking ${uploadProgress.replace("moderating_screenshot_", "screenshot ")}`}
+                {uploadProgress === "inserting_database" && "Finalizing submission..."}
+              </p>
+              <div className="w-full h-1 bg-[#E5E5E5]">
+                <div
+                  className="h-full bg-black transition-all"
+                  style={{
+                    width: uploadProgress === "inserting_database" ? "95%" : "60%"
+                  }}
+                />
               </div>
-            )}
-            {/* Captcha — server-verified before the row is created */}
-            <div className="px-8 py-5 border-t border-[#E5E5E5] flex items-center justify-center">
-              <Turnstile
-                action="submit"
-                innerRef={captchaRef}
-                onVerify={(t) => setCaptchaToken(t)}
-                onExpire={() => setCaptchaToken("")}
-                onError={() => setCaptchaToken("")}
-              />
             </div>
-            {/* Kept clickable; the captcha is validated on submit (handleSubmit
-                sets a clear error if it's missing) so the button is never dead. */}
-            <button type="submit" disabled={loading}
-              className="w-full h-16 flex items-center justify-between px-8 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-              <span className="text-[10px] font-bold uppercase tracking-widest">
-                {loading ? "Submitting..." : "Submit App for Review"}
-              </span>
-              {loading
-                ? <Loader2 className="w-4 h-4 animate-spin text-[#888]" />
-                : <span className="text-sm text-[#888]">→</span>
-              }
-            </button>
-          </div>
+          )}
         </form>
       </div>
 

@@ -194,10 +194,14 @@ export default function SearchBar() {
     if (!term) return text;
     // Escape regex special chars so user input like "(" doesn't crash here.
     const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(${escaped})`, "gi");
-    const parts = text.split(regex);
+    // Split keeps the captured matches as alternating parts. The case-insensitive
+    // test below decides which parts to bold — no `g` flag, since `RegExp.test`
+    // with `g` is stateful via lastIndex and produces flaky results across calls.
+    const splitRegex = new RegExp(`(${escaped})`, "gi");
+    const matchRegex = new RegExp(`^${escaped}$`, "i");
+    const parts = text.split(splitRegex);
     return parts.map((part, i) =>
-      regex.test(part) ? (
+      matchRegex.test(part) ? (
         <span key={i} className="text-black font-black">{part}</span>
       ) : (
         <span key={i}>{part}</span>

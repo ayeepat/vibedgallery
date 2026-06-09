@@ -385,9 +385,6 @@ export default function Admin() {
                       </span>
                     </div>
                   </div>
-                  <p className="text-[9px] text-[#AAAAAA] mt-2">
-                    {new Date(app.created_at).toLocaleDateString()}
-                  </p>
                 </button>
               ))
             )}
