@@ -1,16 +1,6 @@
--- ✅ APPLIED 2026-06-10 (verified: all 6 constraints exist and are validated).
---
--- HARDENING: no CHECK constraint enforces a scheme on the URL columns of
--- apps / app_edits. The client normalizes everything to https://, but a direct
--- PostgREST insert (any authenticated user can insert their own rows) could
--- store javascript:/data: URLs that get rendered as hrefs in the admin panel
--- and, post-approval, on the public app page. The client now scheme-gates
--- every stored URL before rendering (safeHttpUrl), and CSP blocks javascript:
--- navigation — this constraint closes the hole at the source.
---
--- Verified 2026-06-10: zero existing rows violate these patterns, so the
--- VALIDATE steps will succeed. NOT VALID + VALIDATE keeps the lock window
--- minimal anyway.
+-- Enforce http(s) scheme on URL columns of apps / app_edits so a direct
+-- PostgREST insert can't store javascript:/data: URLs that render as hrefs.
+-- Verified zero existing rows violate these patterns.
 
 ALTER TABLE public.apps
   ADD CONSTRAINT apps_url_scheme CHECK (url IS NULL OR url ~* '^https?://') NOT VALID,
