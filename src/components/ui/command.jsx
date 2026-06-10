@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
 import { Search } from "lucide-react"

@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 import * as React from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
 

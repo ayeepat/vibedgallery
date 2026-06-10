@@ -57,16 +57,23 @@ function clearDraft() {
 
 // ─── Download verification file ────────────────────────────────
 function downloadVerificationFile(token) {
+  // Tokens are self-generated hex, but escape anyway so a tampered value can
+  // never break out of the attribute/body in the downloaded file.
+  const t = String(token)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
   const html = `<!DOCTYPE html>
 <html>
 <head>
-  <meta name="vibedgallery-verification" content="${token}">
+  <meta name="vibedgallery-verification" content="${t}">
   <title>VibedGallery Verification</title>
 </head>
 <body>
   <!-- VibedGallery Site Verification -->
   <!-- Do not remove this file until your app is approved -->
-  ${token}
+  ${t}
 </body>
 </html>`;
   // octet-stream so browsers treat it as a download rather than navigating to /
@@ -95,8 +102,8 @@ function downloadVerificationFile(token) {
 }
 
 // ─── Drag & Drop Upload ────────────────────────────────────────
-function DragDropUpload({ label, onFile, preview, onRemove, required, multiple = false }) {
-  const ref = useRef();
+function DragDropUpload({ label, onFile, preview = null, onRemove = undefined, required = false, multiple = false }) {
+  const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
 
   const handleDrag = useCallback((e) => { e.preventDefault(); e.stopPropagation(); }, []);
@@ -192,7 +199,7 @@ function DragDropUpload({ label, onFile, preview, onRemove, required, multiple =
 }
 
 // ─── Field ────────────────────────────────────────────────────
-function Field({ label, required, children }) {
+function Field({ label, required = false, children }) {
   return (
     <div className="border-b border-[#E5E5E5]">
       <label className="block px-4 pt-3 text-[9px] font-bold uppercase tracking-widest text-[#717171]">
@@ -274,7 +281,7 @@ export default function Submit() {
   const [screenshots, setScreenshots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("idle");
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState(/** @type {Record<string, string | null>} */ ({}));
   const [globalError, setGlobalError] = useState("");
   const [step, setStep] = useState("form");
   const [verificationToken, setVerificationToken] = useState("");
@@ -411,7 +418,7 @@ export default function Submit() {
       .filter(Boolean);
 
   const validate = () => {
-    const e = {};
+    const e = /** @type {Record<string, string | null>} */ ({});
     if (!form.title.trim()) e.title = "Required";
     if (!form.tagline.trim()) e.tagline = "Required";
     if (form.tagline.length > 80) e.tagline = "Max 80 characters";

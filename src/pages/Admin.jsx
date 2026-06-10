@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { sendEmail, verifyHtml } from "@/lib/edgeFunctions";
 import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
-import { sanitizeSearchTerm } from "@/lib/urlHelpers";
+import { sanitizeSearchTerm, safeHttpUrl } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
 import { Loader2, Check, X, ExternalLink, Search, ShieldCheck, Flag, Pencil } from "lucide-react";
 
@@ -108,38 +108,45 @@ export default function Admin() {
     }
   }
 
-  // Fetch apps
+  // Fetch apps. The cancelled flag stops a slow earlier request from
+  // overwriting the list after the user has already switched tab/search.
   useEffect(() => {
-    const t = setTimeout(fetchApps, search.trim() ? 250 : 0)
-    return () => clearTimeout(t)
-  }, [filter, search])
+    let cancelled = false
 
-  const fetchApps = async () => {
-    setLoading(true)
-    // Strip PostgREST/SQL-LIKE meta chars + cap length so the `.or()` filter
-    // can't be coerced into another column or generate a multi-KB URL.
-    const term = sanitizeSearchTerm(search)
+    const fetchApps = async () => {
+      setLoading(true)
+      // Strip PostgREST/SQL-LIKE meta chars + cap length so the `.or()` filter
+      // can't be coerced into another column or generate a multi-KB URL.
+      const term = sanitizeSearchTerm(search)
 
-    let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
+      let query = supabase.from("apps").select(APP_SELECT_COLUMNS)
 
-    // Admin search queries ALL statuses; otherwise scope to the active tab.
-    // (submitter_email is no longer SELECT-able from the API, so we can't
-    // search it here. To search by email, fall back to clicking into a row.)
-    if (term) {
-      query = query.or(
-        `title.ilike.%${term}%,tagline.ilike.%${term}%,primary_tool.ilike.%${term}%,category.ilike.%${term}%`
-      )
-    } else {
-      query = query.eq("status", filter)
+      // Admin search queries ALL statuses; otherwise scope to the active tab.
+      // (submitter_email is no longer SELECT-able from the API, so we can't
+      // search it here. To search by email, fall back to clicking into a row.)
+      if (term) {
+        query = query.or(
+          `title.ilike.%${term}%,tagline.ilike.%${term}%,primary_tool.ilike.%${term}%,category.ilike.%${term}%`
+        )
+      } else {
+        query = query.eq("status", filter)
+      }
+
+      const { data, error } = await query
+        .order("created_at", { ascending: false })
+        .limit(200)
+
+      if (cancelled) return
+      if (!error) setApps(data || [])
+      setLoading(false)
     }
 
-    const { data, error } = await query
-      .order("created_at", { ascending: false })
-      .limit(200)
-
-    if (!error) setApps(data || [])
-    setLoading(false)
-  }
+    const t = setTimeout(fetchApps, search.trim() ? 250 : 0)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [filter, search])
 
   const handleApprove = async (app) => {
     setActionLoading(true)
@@ -450,9 +457,9 @@ export default function Admin() {
                       </div>
                       <div className="flex-1 px-4 py-3">
                         <span className="text-xs text-black break-all">
-                          {label === "URL" ? (
+                          {label === "URL" && safeHttpUrl(value) ? (
                             <a
-                              href={value}
+                              href={safeHttpUrl(value)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-1 hover:underline"
@@ -460,9 +467,9 @@ export default function Admin() {
                               {value}
                               <ExternalLink className="w-3 h-3" />
                             </a>
-                          ) : label === "Verification File" ? (
+                          ) : label === "Verification File" && safeHttpUrl(selected.url) ? (
                             <a
-                              href={`${(selected.url || "").replace(/\/+$/, "")}/${value}`}
+                              href={`${safeHttpUrl(selected.url).replace(/\/+$/, "")}/${value}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-1 hover:underline font-mono"
@@ -737,9 +744,9 @@ function ReportsPanel() {
                   <p className="text-sm font-black uppercase tracking-tight text-black break-words">
                     {r.apps?.title || "(app not found)"}
                   </p>
-                  {r.apps?.url && (
+                  {safeHttpUrl(r.apps?.url) && (
                     <a
-                      href={r.apps.url}
+                      href={safeHttpUrl(r.apps.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] text-[#717171] hover:text-black underline break-all inline-flex items-center gap-1"
@@ -869,8 +876,12 @@ function ValueCell({ value, kind }) {
     )
   }
   if (kind === "url") {
+    const href = safeHttpUrl(value)
+    if (!href) {
+      return <span className="text-xs text-black break-all">{value}</span>
+    }
     return (
-      <a href={value} target="_blank" rel="noopener noreferrer" className="text-xs text-black hover:underline break-all inline-flex items-center gap-1">
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-xs text-black hover:underline break-all inline-flex items-center gap-1">
         {value} <ExternalLink className="w-3 h-3 shrink-0" />
       </a>
     )
@@ -892,40 +903,43 @@ function EditsPanel() {
   const [verifyResult, setVerifyResult] = useState(null)
   const [recheckLoading, setRecheckLoading] = useState(false)
 
-  const fetchEdits = async () => {
-    setLoading(true)
-    // Embed the live apps row so the diff has both sides in one round-trip.
-    // PostgREST resolves app_edits.app_id -> apps.id via the FK we declared.
-    const { data, error } = await supabase
-      .from("app_edits")
-      .select(`
-        id, app_id, user_id, status, created_at, reviewed_at, reviewed_by,
-        rejection_reason, verification_token, ownership_verified,
-        safe_browsing_passed, safe_browsing_threats,
-        title, tagline, description, url, category, tags,
-        primary_tool, other_tools, demo_video_url,
-        thumbnail_url, screenshot_urls, slug,
-        submitter_twitter, submitter_github,
-        apps:app_id (
-          id, title, tagline, description, url, category, tags,
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchEdits = async () => {
+      setLoading(true)
+      // Embed the live apps row so the diff has both sides in one round-trip.
+      // PostgREST resolves app_edits.app_id -> apps.id via the FK we declared.
+      const { data, error } = await supabase
+        .from("app_edits")
+        .select(`
+          id, app_id, user_id, status, created_at, reviewed_at, reviewed_by,
+          rejection_reason, verification_token, ownership_verified,
+          safe_browsing_passed, safe_browsing_threats,
+          title, tagline, description, url, category, tags,
           primary_tool, other_tools, demo_video_url,
           thumbnail_url, screenshot_urls, slug,
           submitter_twitter, submitter_github,
-          verification_token, ownership_verified, status
-        )
-      `)
-      .in("status", filter === "all"
-        ? ["pending_verification", "pending_review", "approved", "rejected"]
-        : [filter])
-      .order("created_at", { ascending: false })
-      .limit(200)
-    if (!error) setEdits(data || [])
-    setLoading(false)
-  }
+          apps:app_id (
+            id, title, tagline, description, url, category, tags,
+            primary_tool, other_tools, demo_video_url,
+            thumbnail_url, screenshot_urls, slug,
+            submitter_twitter, submitter_github,
+            verification_token, ownership_verified, status
+          )
+        `)
+        .in("status", filter === "all"
+          ? ["pending_verification", "pending_review", "approved", "rejected"]
+          : [filter])
+        .order("created_at", { ascending: false })
+        .limit(200)
+      if (cancelled) return
+      if (!error) setEdits(data || [])
+      setLoading(false)
+    }
 
-  useEffect(() => {
     fetchEdits()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true }
   }, [filter])
 
   // Compute the diff list — only fields that actually changed.

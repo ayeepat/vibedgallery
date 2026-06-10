@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 "use client"
 
 import * as React from "react"

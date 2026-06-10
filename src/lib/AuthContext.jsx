@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, useRef } from 'r
 import { supabase } from '@/lib/supabaseClient';
 import { sanitizeRedirectPath } from '@/lib/urlHelpers';
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser]               = useState(null);

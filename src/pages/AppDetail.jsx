@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import Nav from "../components/Nav";
 import Footer from "@/components/Footer";
 import { useApp, useAppByHandle, useMaker } from "@/lib/useApps";
-import { appPath } from "@/lib/urlHelpers";
+import { appPath, safeHttpUrl } from "@/lib/urlHelpers";
 import { useMemo, useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -50,8 +50,8 @@ function twitterUrl(raw) {
   if (!raw) return null;
   const handle = raw.replace(/^@/, "").trim();
   if (!handle) return null;
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `https://x.com/${handle}`;
+  if (/^https?:\/\//i.test(raw)) return safeHttpUrl(raw);
+  return `https://x.com/${encodeURIComponent(handle)}`;
 }
 
 // One view per browser session per app — keeps the counter honest without
@@ -180,10 +180,14 @@ export default function AppDetail() {
   }
 
   const makerName = maker?.name || "Anonymous Maker";
-  const embedUrl = getEmbedUrl(app.demo_video_url);
+  // Scheme-gate every stored URL before it becomes an href (see safeHttpUrl).
+  const liveUrl = safeHttpUrl(app.url);
+  const demoUrl = safeHttpUrl(app.demo_video_url);
+  const embedUrl = getEmbedUrl(demoUrl);
   const twitter = twitterUrl(app.submitter_twitter);
-  const github = app.submitter_github || null;
-  const screenshots = Array.isArray(app.screenshots) ? app.screenshots : [];
+  const github = safeHttpUrl(app.submitter_github);
+  const screenshots = (Array.isArray(app.screenshots) ? app.screenshots : [])
+    .filter((src) => safeHttpUrl(src));
 
   return (
     <div className="min-h-screen bg-white">
@@ -253,14 +257,16 @@ export default function AppDetail() {
             {/* Save / bookmark */}
             <BookmarkButton appId={app.id} variant="block" />
             {/* Visit */}
-            <a
-              href={app.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-12 px-8 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
-            >
-              Visit Live Site →
-            </a>
+            {liveUrl && (
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-12 px-8 bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+              >
+                Visit Live Site →
+              </a>
+            )}
           </div>
         </div>
 
@@ -289,7 +295,7 @@ export default function AppDetail() {
         )}
 
         {/* Demo video */}
-        {app.demo_video_url && (
+        {demoUrl && (
           <div className="mt-10">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA] mb-3">Demo</p>
             {embedUrl ? (
@@ -305,7 +311,7 @@ export default function AppDetail() {
               </div>
             ) : (
               <a
-                href={app.demo_video_url}
+                href={demoUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-black border border-[#E5E5E5] px-4 py-2 hover:bg-black hover:text-white transition-colors"
@@ -481,8 +487,11 @@ function UpvoteButton({ appId, initialCount, returnPath }) {
         if (error) throw error;
       }
 
-      // Refresh the app + gallery queries so Trending re-sorts.
-      queryClient.invalidateQueries({ queryKey: ["app", appId] });
+      // Refresh the app + gallery queries so Trending re-sorts. The detail
+      // query key is ["app", id] on the legacy route but
+      // ["app", "handle", username, slug] on pretty URLs — invalidating the
+      // bare ["app"] prefix covers both.
+      queryClient.invalidateQueries({ queryKey: ["app"] });
       queryClient.invalidateQueries({ queryKey: ["apps", "approved"] });
     } catch (err) {
       // Roll back the optimistic update.

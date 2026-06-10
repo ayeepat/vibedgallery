@@ -1,3 +1,7 @@
+-- ✅ ALREADY APPLIED (verified against prod 2026-06-10: apply_app_edit is
+-- owned by postgres and postgres holds the column UPDATE grants). Kept for
+-- the record — safe to delete.
+--
 -- Fix: apply_app_edit() still hits "permission denied for table apps" because
 -- it's a SECURITY DEFINER function but its OWNER lacks UPDATE on the locked
 -- columns (verification_token, safe_browsing_passed, safe_browsing_threats).

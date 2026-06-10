@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 "use client";
 import { useTheme } from "next-themes"
 import { Toaster as Sonner } from "sonner"

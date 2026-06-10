@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 // Inspired by react-hot-toast library
 import { useState, useEffect } from "react";
 

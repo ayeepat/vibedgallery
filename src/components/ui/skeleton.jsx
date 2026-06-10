@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 import { cn } from "@/lib/utils"
 
 function Skeleton({

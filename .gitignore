@@ -6,3 +6,7 @@ dist
 .DS_Store
 .aider*
 supabase/.temp
+# Personal account-preference files — repo is public, keep these local.
+CLAUDE.md
+src/CLAUDE.md
+.claude/

@@ -61,7 +61,7 @@ function formatCount(n) {
 // Tooltip
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label }) {
+function ChartTooltip({ active = false, payload = [], label = "" }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-[#E5E5E5] px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.08)]">

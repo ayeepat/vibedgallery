@@ -13,6 +13,22 @@ export function normalizeUrl(input) {
   return url;
 }
 
+// Gate a stored URL before rendering it as an href. The DB has no scheme CHECK
+// on apps.url / demo_video_url / submitter_github, so a row written directly
+// through PostgREST could carry a javascript:/data: URL; CSP blocks the click
+// but this keeps the poisoned href out of the DOM entirely. Returns the URL
+// when it parses as http(s), otherwise null.
+export function safeHttpUrl(raw) {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "http:" || u.protocol === "https:") return raw;
+  } catch {
+    // not an absolute URL
+  }
+  return null;
+}
+
 // Sanitize a free-text search term before it's interpolated into a PostgREST
 // `or()` / `ilike` filter. Strips the meta chars that break or could be coerced
 // across that syntax — commas, parens, colons, asterisks, SQL LIKE wildcards

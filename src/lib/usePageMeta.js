@@ -62,6 +62,16 @@ function setStructuredData(json) {
  *     description: 'Browse apps built with AI.',
  *     path: '/gallery',
  *   });
+ *
+ * @param {{
+ *   title?: string,
+ *   description?: string,
+ *   path?: string,
+ *   image?: string,
+ *   type?: string,
+ *   noindex?: boolean,
+ *   structuredData?: object | null,
+ * }} [options]
  */
 export function usePageMeta({
   title,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
-import { appPath } from "@/lib/urlHelpers";
+import { appPath, sanitizeSearchTerm } from "@/lib/urlHelpers";
 
 // Columns + embedded maker handle needed to build a pretty /<username>/<slug>
 // link straight from a search result.
@@ -21,6 +21,9 @@ export default function SearchBar() {
   const wrapperRef = useRef(null);
   const inputRef = useRef(null);
   const debounceRef = useRef(null);
+  // Monotonic id per fired search — a slow earlier response that lands after
+  // a newer one must not overwrite the newer results.
+  const searchSeqRef = useRef(0);
   // Distinguishes a value the user typed (→ live typeahead + dropdown) from one
   // mirrored in from the URL ?q= (→ just populate the box, no dropdown/fetch).
   const userTypedRef = useRef(false);
@@ -77,13 +80,13 @@ export default function SearchBar() {
 
     // Wait 200ms before searching
     debounceRef.current = setTimeout(async () => {
+      const seq = ++searchSeqRef.current;
       setLoading(true);
 
       try {
-        // Strip characters that break PostgREST's `or()` filter syntax
-        // (commas, parens, colons, asterisks) and SQL LIKE wildcards
-        // (%, _, \). Anything left is safe to interpolate into the pattern.
-        const term = query.trim().replace(/[,()*:%_\\]/g, "");
+        // Shared sanitizer (urlHelpers) — strips PostgREST `or()` meta chars
+        // and SQL LIKE wildcards, bounds the length. Same rule as Gallery/Admin.
+        const term = sanitizeSearchTerm(query);
         if (!term) {
           setResults([]);
           setOpen(false);
@@ -109,7 +112,9 @@ export default function SearchBar() {
 
         if (textError) throw textError;
 
-        const merged = textData ?? [];
+        // supabase-js can't statically type the embedded-resource select
+        // string and falls back to an error type — cast through any.
+        const merged = /** @type {any[]} */ (textData ?? []);
 
         // Tags is a text[] column — `ilike` doesn't apply. Use array-contains.
         if (merged.length < 6) {
@@ -122,20 +127,23 @@ export default function SearchBar() {
 
           if (tagData) {
             const seen = new Set(merged.map((d) => d.id));
-            for (const r of tagData) {
+            // supabase-js can't statically type the embedded-resource select
+            // string here and falls back to an error type — cast through any.
+            for (const r of /** @type {any[]} */ (tagData)) {
               if (!seen.has(r.id)) merged.push(r);
             }
           }
         }
 
+        if (seq !== searchSeqRef.current) return; // a newer search superseded us
         setResults(merged);
         setOpen(merged.length > 0);
         setHighlighted(-1);
       } catch (err) {
         console.error("Search error:", err);
-        setResults([]);
+        if (seq === searchSeqRef.current) setResults([]);
       } finally {
-        setLoading(false);
+        if (seq === searchSeqRef.current) setLoading(false);
       }
     }, 200);
 

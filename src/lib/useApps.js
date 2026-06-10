@@ -27,12 +27,16 @@ export const APP_SELECT_COLUMNS =
 // Lean column set for PUBLIC reads (gallery, app detail, maker pages). It
 // returns only what those views render. This (a) shrinks the payload sent to
 // every anonymous visitor and (b) avoids exposing review-pipeline internals
-// (verification_token, safe_browsing_threats, rejection_reason, reviewed_by,
-// status) to anyone who can read an approved row.
+// (verification_token, safe_browsing_threats, rejection_reason, reviewed_by)
+// to anyone who can read an approved row. `status` IS included: AppDetail's
+// noindex logic checks `app.status !== "approved"`, and omitting the column
+// made that check always true — every public app page shipped
+// robots=noindex and dropped its JSON-LD. RLS already limits anon to
+// approved rows, so the value leaks nothing.
 export const APP_PUBLIC_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, ' +
-  'thumbnail_url, screenshot_urls, slug, ' +
+  'thumbnail_url, screenshot_urls, slug, status, ' +
   'submitter_twitter, submitter_github, ' +
   'ownership_verified, upvotes, views, created_at'
 
@@ -261,11 +265,13 @@ export function useBookmarkedApps(userId) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('bookmarks')
-        .select(`created_at, apps:app_id (status, ${APP_PUBLIC_SELECT})`)
+        .select(`created_at, apps:app_id (${APP_PUBLIC_SELECT})`)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data || [])
-        .map((row) => row.apps)
+        // apps:app_id is a to-one embed at runtime; supabase-js types it as an
+        // array, so unwrap through any.
+        .map((row) => /** @type {any} */ (row.apps))
         .filter((a) => a && a.status === 'approved')
         .map(normalizeApp)
     },
@@ -297,7 +303,7 @@ export function useBookmarkIds(userId) {
 export function useToggleBookmark(userId) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ appId, currentlyBookmarked }) => {
+    mutationFn: async (/** @type {{ appId: string, currentlyBookmarked: boolean }} */ { appId, currentlyBookmarked }) => {
       if (!userId) throw new Error('Not signed in')
       if (currentlyBookmarked) {
         const { error } = await supabase
@@ -313,7 +319,7 @@ export function useToggleBookmark(userId) {
         if (error) throw error
       }
     },
-    onMutate: async ({ appId, currentlyBookmarked }) => {
+    onMutate: async (/** @type {{ appId: string, currentlyBookmarked: boolean }} */ { appId, currentlyBookmarked }) => {
       await queryClient.cancelQueries({ queryKey: ['bookmarks', 'ids', userId] })
       const previous = queryClient.getQueryData(['bookmarks', 'ids', userId])
       const next = new Set(previous instanceof Set ? previous : [])

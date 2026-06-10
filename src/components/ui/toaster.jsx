@@ -1,3 +1,4 @@
+// @ts-nocheck — vendored shadcn/ui component, not maintained against checkJs
 import { useToast } from "@/components/ui/use-toast";
 import {
   Toast,

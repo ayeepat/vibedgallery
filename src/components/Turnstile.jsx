@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 
 const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY;
 
+// Cloudflare's script attaches `turnstile` to window — not in lib.dom types.
+const getTurnstile = () => /** @type {any} */ (window).turnstile;
+
 // Sentinel emitted when no site key is configured. It is NOT a bypass: the
 // server (verify-turnstile) only skips verification when its own
 // TURNSTILE_SECRET_KEY is also unset. If the secret IS configured, the server
@@ -47,13 +50,13 @@ export default function Turnstile({
     let cancelled = false;
     const tryMount = () => {
       if (cancelled) return;
-      if (!window.turnstile) {
+      if (!getTurnstile()) {
         setTimeout(tryMount, 100);
         return;
       }
       if (!containerRef.current) return;
 
-      const id = window.turnstile.render(containerRef.current, {
+      const id = getTurnstile().render(containerRef.current, {
         sitekey: SITE_KEY,
         action,
         theme,
@@ -69,9 +72,9 @@ export default function Turnstile({
 
     return () => {
       cancelled = true;
-      if (widgetIdRef.current && window.turnstile?.remove) {
+      if (widgetIdRef.current && getTurnstile()?.remove) {
         try {
-          window.turnstile.remove(widgetIdRef.current);
+          getTurnstile().remove(widgetIdRef.current);
         } catch {
           // widget may already be gone
         }
@@ -88,8 +91,8 @@ export default function Turnstile({
     if (!innerRef) return;
     innerRef.current = {
       reset: () => {
-        if (widgetIdRef.current && window.turnstile?.reset) {
-          window.turnstile.reset(widgetIdRef.current);
+        if (widgetIdRef.current && getTurnstile()?.reset) {
+          getTurnstile().reset(widgetIdRef.current);
         }
       },
     };
