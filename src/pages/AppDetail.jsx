@@ -21,12 +21,21 @@ function getEmbedUrl(raw) {
     const u = new URL(raw);
     const host = u.hostname.replace(/^www\./, "");
 
+    // YouTube video ids are 11 chars of [\w-]; be lenient on length but strict
+    // on charset since the id lands in an iframe src.
+    const ytId = (s) => (typeof s === "string" && /^[\w-]{5,20}$/.test(s) ? s : null);
     if (host === "youtube.com" || host === "m.youtube.com") {
-      const v = u.searchParams.get("v");
+      const v = ytId(u.searchParams.get("v"));
       if (v) return `https://www.youtube.com/embed/${v}`;
+      // /shorts/<id>, /live/<id>, /embed/<id> path forms.
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (["shorts", "live", "embed"].includes(parts[0])) {
+        const id = ytId(parts[1]);
+        if (id) return `https://www.youtube.com/embed/${id}`;
+      }
     }
     if (host === "youtu.be") {
-      const id = u.pathname.replace(/^\//, "");
+      const id = ytId(u.pathname.replace(/^\//, ""));
       if (id) return `https://www.youtube.com/embed/${id}`;
     }
     if (host === "vimeo.com") {

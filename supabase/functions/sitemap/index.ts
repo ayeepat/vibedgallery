@@ -37,7 +37,9 @@ const STATIC_ROUTES: Array<{
   { path: "/gallery", changefreq: "daily", priority: "0.9" },
   { path: "/how-it-works", changefreq: "monthly", priority: "0.6" },
   { path: "/about", changefreq: "monthly", priority: "0.5" },
-  { path: "/submit", changefreq: "monthly", priority: "0.5" },
+  // /submit is intentionally absent: the page ships robots=noindex (it's a
+  // signed-in form), and advertising a noindex URL in the sitemap sends
+  // crawlers contradictory signals.
   { path: "/login", changefreq: "yearly", priority: "0.3" },
   { path: "/register", changefreq: "yearly", priority: "0.3" },
   { path: "/terms", changefreq: "yearly", priority: "0.2" },

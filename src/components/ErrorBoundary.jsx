@@ -22,6 +22,19 @@ export class ErrorBoundary extends React.Component {
       error,
       errorInfo
     });
+    // Render crashes caught here never hit Sentry's global handlers — report
+    // explicitly. Same lazy-load gate as main.jsx: no DSN, no SDK in bundle.
+    if (import.meta.env.VITE_SENTRY_DSN) {
+      import('@sentry/react')
+        .then((Sentry) => {
+          Sentry.captureException(error, {
+            extra: { componentStack: errorInfo?.componentStack },
+          });
+        })
+        .catch(() => {
+          // Monitoring must never break the error page.
+        });
+    }
   }
 
   render() {

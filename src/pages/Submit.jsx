@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabaseClient";
 import { generateVerificationToken } from "@/lib/verifyOwnership";
@@ -45,7 +45,9 @@ function loadDraft() {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
-    return data.form;
+    // Guard the shape — a draft saved by an older form version may be missing
+    // fields; callers merge it over defaults so .trim() never hits undefined.
+    return data.form && typeof data.form === "object" ? data.form : null;
   } catch {
     return null;
   }
@@ -265,19 +267,24 @@ export default function Submit() {
     ownershipConfirmed: false,
   };
 
-  const [form, setForm] = useState(() => loadDraft() || defaultForm);
+  // Load the draft exactly once per mount; the three states below all derive
+  // from it. ownershipConfirmed is never restored — the legal confirmation
+  // must be re-ticked on every visit.
+  const [restoredDraft] = useState(loadDraft);
+  const [form, setForm] = useState(() =>
+    restoredDraft
+      ? { ...defaultForm, ...restoredDraft, ownershipConfirmed: false }
+      : defaultForm
+  );
   // Whether the user has hand-edited the slug. Until they do, it auto-tracks the
   // slugified app title. A restored draft slug counts as already edited.
-  const [slugEdited, setSlugEdited] = useState(() => !!loadDraft()?.slug);
+  const [slugEdited, setSlugEdited] = useState(() => !!restoredDraft?.slug);
   // Live availability/format feedback for the two pretty-URL fields.
   // state: "" | "checking" | "ok" | message-string (anything else is an error).
   const [usernameStatus, setUsernameStatus] = useState("");
   const [slugStatus, setSlugStatus] = useState("");
   const [thumbnail, setThumbnail] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
-  // Only the setter is consumed (drives the per-field upload state machine);
-  // the value isn't read directly, so we skip binding it.
-  const [, setThumbnailStatus] = useState("idle");
   const [screenshots, setScreenshots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("idle");
@@ -287,9 +294,53 @@ export default function Submit() {
   const [verificationToken, setVerificationToken] = useState("");
   const [submittedAppId, setSubmittedAppId] = useState(null);
   const [fileDownloaded, setFileDownloaded] = useState(false);
-  const [draftRestored, setDraftRestored] = useState(!!loadDraft());
+  const [draftRestored, setDraftRestored] = useState(!!restoredDraft);
   const [captchaToken, setCaptchaToken] = useState("");
   const captchaRef = useRef(null);
+
+  // "Resubmit" from Profile lands here with ?app_id=<rejected app>. Pre-fill
+  // the form from that row (owner-scoped by RLS) so the user fixes and
+  // resubmits instead of retyping everything. Media must be re-uploaded — we
+  // only ever hold object URLs to local Files, never the old CDN URLs.
+  const [searchParams] = useSearchParams();
+  const resubmitAppId = searchParams.get("app_id");
+  useEffect(() => {
+    if (!resubmitAppId || !user) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("apps")
+        .select(
+          "user_id, title, tagline, description, url, category, tags, " +
+          "primary_tool, other_tools, demo_video_url, submitter_twitter, " +
+          "submitter_github, slug, status"
+        )
+        .eq("id", resubmitAppId)
+        .maybeSingle();
+      // supabase-js can't statically type the concatenated select string and
+      // falls back to an error type — cast through any (same as useApps.js).
+      const row = /** @type {any} */ (data);
+      if (cancelled || error || !row || row.user_id !== user.id) return;
+      setForm((f) => ({
+        ...f,
+        title: row.title || "",
+        tagline: row.tagline || "",
+        description: row.description || "",
+        url: row.url || "",
+        category: row.category || "",
+        tags: (row.tags || []).join(", "),
+        primaryTool: row.primary_tool || "",
+        otherTools: row.other_tools || "",
+        demoVideoUrl: row.demo_video_url || "",
+        twitterHandle: row.submitter_twitter || "",
+        githubRepo: row.submitter_github || "",
+        slug: row.slug || f.slug,
+        ownershipConfirmed: false,
+      }));
+      setSlugEdited(true);
+    })();
+    return () => { cancelled = true; };
+  }, [resubmitAppId, user]);
 
   const set = (key, val) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -347,11 +398,14 @@ export default function Submit() {
     if (!isValidSlug(s)) { setSlugStatus("1–60 chars: a–z, 0–9, - or _"); return; }
     setSlugStatus("checking");
     const t = setTimeout(async () => {
+      // Rejected rows don't block slug reuse (the unique index excludes them)
+      // — otherwise a resubmit could never keep its original link.
       const { data, error } = await supabase
         .from("apps")
         .select("id")
         .eq("user_id", user.id)
         .eq("slug", s)
+        .neq("status", "rejected")
         .maybeSingle();
       if (error) { setSlugStatus(""); return; }
       if (data) setSlugStatus("You already have an app with this link");
@@ -379,21 +433,17 @@ export default function Submit() {
   }, [form, step]);
 
   const handleThumbnail = async (file) => {
-    setThumbnailStatus("checking");
     try {
       const check = await checkImageSafety(file);
       if (!check.safe) {
         setErrors((e) => ({ ...e, thumbnail: check.errors.join(", ") }));
-        setThumbnailStatus("error");
         return;
       }
       setErrors((e) => ({ ...e, thumbnail: null }));
       setThumbnail(file);
       setThumbnailPreview(URL.createObjectURL(file));
-      setThumbnailStatus("ready");
     } catch {
       setErrors((e) => ({ ...e, thumbnail: "Failed to process image" }));
-      setThumbnailStatus("error");
     }
   };
 
@@ -651,32 +701,14 @@ export default function Submit() {
     }
   };
 
-  // User claims the file is deployed. We only flip status to pending_review —
-  // ownership_verified is intentionally NOT set here. The client cannot prove
-  // ownership; only the admin's server-side verify-html result is trusted to
-  // flip that flag. Setting it from the client created a verified-badge
-  // spoofing path where a force-approve over a failing verifyHtml kept the
-  // self-claimed `true` (see Admin.jsx handleApprove).
-  const handleVerificationDone = async () => {
-    setLoading(true);
-    try {
-      const { error } = await supabase
-        .from("apps")
-        .update({ status: "pending_review" })
-        .eq("id", submittedAppId);
-      if (error) throw error;
-      setStep("success");
-    } catch (err) {
-      setGlobalError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // "Skip for now" — user wants to deploy the file later. Still move the
-  // row into the admin queue (status=pending_review) but DO NOT claim
-  // ownership_verified. Admin will run verify-html before approving.
-  const handleSkipVerification = async () => {
+  // Both "I've deployed the file" and "Skip for now" move the row into the
+  // admin queue (status=pending_review). ownership_verified is intentionally
+  // NOT set here — the client cannot prove ownership; only the admin's
+  // server-side verify-html result is trusted to flip that flag. Setting it
+  // from the client created a verified-badge spoofing path where a
+  // force-approve over a failing verifyHtml kept the self-claimed `true`
+  // (see Admin.jsx handleApprove).
+  const moveToReviewQueue = async () => {
     setLoading(true);
     try {
       const { error } = await supabase
@@ -843,7 +875,7 @@ export default function Submit() {
 
             <div className="border border-[#E5E5E5]">
               <button
-                onClick={handleVerificationDone}
+                onClick={moveToReviewQueue}
                 disabled={loading || !fileDownloaded}
                 className="h-14 w-full flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -853,7 +885,7 @@ export default function Submit() {
                 {loading && <Loader2 className="w-3 h-3 animate-spin" />}
               </button>
               <button
-                onClick={handleSkipVerification}
+                onClick={moveToReviewQueue}
                 disabled={loading}
                 className="h-10 w-full flex items-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors border-t border-[#E5E5E5] disabled:opacity-50"
               >

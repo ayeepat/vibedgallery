@@ -218,6 +218,7 @@ export default function Admin() {
 
     } catch (err) {
       console.error(err)
+      alert(`Failed to approve: ${err?.message || err}`)
     } finally {
       setActionLoading(false)
     }
@@ -251,6 +252,7 @@ export default function Admin() {
 
     } catch (err) {
       console.error(err)
+      alert(`Failed to reject: ${err?.message || err}`)
     } finally {
       setActionLoading(false)
     }

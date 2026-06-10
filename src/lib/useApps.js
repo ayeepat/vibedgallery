@@ -196,15 +196,18 @@ export function useAppByHandle(username, slug) {
   return useQuery({
     queryKey: ['app', 'handle', u, s],
     queryFn: async () => {
-      // No explicit status filter — RLS governs visibility (anon sees only
+      // No approved-only filter — RLS governs visibility (anon sees only
       // approved rows; an owner/admin can resolve their own pending app), which
       // keeps the legacy /app/:id -> pretty-URL redirect valid in every case.
-      // (username, slug) is globally unique, so maybeSingle() is safe.
+      // Rejected rows ARE excluded: the slug unique index ignores them, so an
+      // owner could otherwise see two of their own rows match and break
+      // maybeSingle().
       const { data, error } = await supabase
         .from('apps')
         .select(`${APP_PUBLIC_COLUMNS}, maker:public_profiles!inner(username)`)
         .eq('slug', s)
         .eq('maker.username', u)
+        .neq('status', 'rejected')
         .maybeSingle()
       if (error) throw error
       return data ? normalizeApp(data) : null

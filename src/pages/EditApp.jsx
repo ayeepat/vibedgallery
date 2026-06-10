@@ -398,12 +398,14 @@ export default function EditApp() {
       // so we do the live check here. The unique constraint on apps catches
       // anything that races at approval time.
       if (slugChanged) {
+        // Rejected rows don't hold a slug (the unique index excludes them).
         const { data: clash } = await supabase
           .from("apps")
           .select("id")
           .eq("user_id", user.id)
           .eq("slug", form.slug.trim())
           .neq("id", app.id)
+          .neq("status", "rejected")
           .maybeSingle();
         if (clash) {
           setErrors((e) => ({ ...e, slug: "You already have another app with this link" }));
@@ -558,29 +560,12 @@ export default function EditApp() {
     }
   };
 
-  // Flip the edit to pending_review once the user claims they've deployed the
-  // verification file at the new URL. We do NOT set ownership_verified from
-  // the client — only the admin's server-side verifyHtml result is trusted to
-  // flip that flag. Setting it here previously created a verified-badge
-  // spoofing path on force-approve (see Admin.jsx handleApprove).
-  const handleVerificationDone = async () => {
-    if (!editId) return;
-    setSubmitting(true);
-    try {
-      const { error } = await supabase
-        .from("app_edits")
-        .update({ status: "pending_review" })
-        .eq("id", editId);
-      if (error) throw error;
-      setStep("success");
-    } catch (err) {
-      setGlobalError(err?.message || "Failed to mark verification done.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSkipVerification = async () => {
+  // Both "I've deployed the file" and "Skip for now" flip the edit to
+  // pending_review. We do NOT set ownership_verified from the client — only
+  // the admin's server-side verifyHtml result is trusted to flip that flag.
+  // Setting it here previously created a verified-badge spoofing path on
+  // force-approve (see Admin.jsx handleApprove).
+  const moveToReviewQueue = async () => {
     if (!editId) return;
     setSubmitting(true);
     try {
@@ -697,7 +682,7 @@ export default function EditApp() {
 
             <div className="border border-[#E5E5E5]">
               <button
-                onClick={handleVerificationDone}
+                onClick={moveToReviewQueue}
                 disabled={submitting || !fileDownloaded}
                 className="h-14 w-full flex items-center justify-between px-6 bg-black text-white hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -707,7 +692,7 @@ export default function EditApp() {
                 {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
               </button>
               <button
-                onClick={handleSkipVerification}
+                onClick={moveToReviewQueue}
                 disabled={submitting}
                 className="h-10 w-full flex items-center px-6 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black hover:bg-[#F5F5F5] transition-colors border-t border-[#E5E5E5] disabled:opacity-50"
               >
