@@ -1,3 +1,6 @@
+-- ✅ APPLIED 2026-06-10 (verified: anon SELECT on these columns now fails with
+-- permission denied; the full APP_PUBLIC_COLUMNS gallery select still works).
+--
 -- HARDENING: anon currently holds column-level SELECT on review-pipeline
 -- internals of public.apps (verification_token, rejection_reason, reviewed_by,
 -- reviewed_at, safe_browsing_passed, safe_browsing_threats). The client only

@@ -1,3 +1,5 @@
+-- ✅ APPLIED 2026-06-10 (verified: all 6 constraints exist and are validated).
+--
 -- HARDENING: no CHECK constraint enforces a scheme on the URL columns of
 -- apps / app_edits. The client normalizes everything to https://, but a direct
 -- PostgREST insert (any authenticated user can insert their own rows) could

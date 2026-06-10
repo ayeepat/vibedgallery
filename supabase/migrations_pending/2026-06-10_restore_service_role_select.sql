@@ -1,3 +1,6 @@
+-- ✅ APPLIED 2026-06-10 (verified: service_role SELECT restored on all three
+-- tables; send-email's exact apps lookup incl. submitter_email succeeds).
+--
 -- FIX (high priority): send-email Edge Function is broken in production.
 --
 -- The column-level lockdown that revoked table privileges on public.apps /
