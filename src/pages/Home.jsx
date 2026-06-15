@@ -8,7 +8,7 @@ import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
 
 const MARQUEE_NAMES = [
-  "TASKVIBE", "PROMPTCRM", "FLOWDESK", "NICHEAI", "TONELAB", "WAVEFORM",
+  "LET HIM COOK AI", "ST: FREELANCER", "PIXVEC", "SPORTSPOOL", "NOTENOTES", "FLUENTCODE",
   "ECHODOCS", "SYNAPSE", "BRIEFLY", "MIRRORDB", "HOTSWAP", "ZENMAIL",
 ];
 
