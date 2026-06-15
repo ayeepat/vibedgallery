@@ -9,7 +9,7 @@ import { usePageMeta } from "@/lib/usePageMeta";
 
 const MARQUEE_NAMES = [
   "LET HIM COOK AI", "ST: FREELANCER", "PIXVEC", "SPORTSPOOL", "NOTENOTES", "FLUENTCODE",
-  "ECHODOCS", "SYNAPSE", "BRIEFLY", "MIRRORDB", "HOTSWAP", "ZENMAIL",
+  "PROMPTCRM", "SYNAPSE", "BRIEFLY", "MIRRORDB", "HOTSWAP", "ZENMAIL",
 ];
 
 const doubled = [...MARQUEE_NAMES, ...MARQUEE_NAMES];
