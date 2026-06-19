@@ -139,9 +139,13 @@ export default function AppDetail() {
       image: app.image,
       url: `https://www.vibedgallery.com${appPath(app)}`,
       datePublished: app.created_at,
-      author: maker?.name
-        ? { "@type": "Person", name: maker.name }
-        : { "@type": "Organization", name: "VibedGallery Maker" },
+      author: app.display_name
+        ? { "@type": "Person", name: app.display_name }
+        : app.username && app.username !== maker?.username
+          ? { "@type": "Person", name: app.username }
+          : maker?.name
+            ? { "@type": "Person", name: maker.name }
+            : { "@type": "Organization", name: "VibedGallery Maker" },
       genre: app.category,
       keywords: [app.category, app.tool, ...(app.tags || [])]
         .filter(Boolean)
@@ -198,7 +202,11 @@ export default function AppDetail() {
     );
   }
 
-  const makerName = maker?.name || "Anonymous Maker";
+  // When an admin posted with a per-app override, hide the real profile name
+  // and don't link to /maker/<user_id> — both would expose the real account.
+  const hasDisplayOverride = !!(app.username && app.username !== maker?.username);
+  const makerName = app.display_name
+    || (hasDisplayOverride ? (app.username || "Anonymous Maker") : (maker?.name || "Anonymous Maker"));
   // Scheme-gate every stored URL before it becomes an href (see safeHttpUrl).
   const liveUrl = safeHttpUrl(app.url);
   const demoUrl = safeHttpUrl(app.demo_video_url);
@@ -262,12 +270,16 @@ export default function AppDetail() {
             {/* Maker line */}
             <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#AAAAAA]">
               By{" "}
-              <Link
-                to={`/maker/${app.user_id}`}
-                className="text-black hover:underline underline-offset-4"
-              >
-                {makerName}
-              </Link>
+              {hasDisplayOverride ? (
+                <span className="text-black">{makerName}</span>
+              ) : (
+                <Link
+                  to={`/maker/${app.user_id}`}
+                  className="text-black hover:underline underline-offset-4"
+                >
+                  {makerName}
+                </Link>
+              )}
             </p>
           </div>
 

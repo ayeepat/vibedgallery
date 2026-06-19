@@ -53,14 +53,17 @@ interface AppRow {
   tags: string[] | null;
   updated_at: string | null;
   created_at: string | null;
+  // Admin-only per-app override; preferred over the embedded maker handle.
+  display_username: string | null;
   // Embedded maker handle via apps.user_id -> profiles.id FK.
   maker: { username: string | null } | null;
 }
 
 // Canonical loc for an app: pretty /<username>/<slug> when both are known,
-// else legacy /app/<id>.
+// else legacy /app/<id>. display_username (admin override) wins so the public
+// URL reflects the override handle rather than the admin's real profile.
 function appLoc(app: AppRow): string {
-  const username = app.maker?.username;
+  const username = app.display_username || app.maker?.username;
   if (username && app.slug) return `${SITE_ORIGIN}/${username}/${app.slug}`;
   return `${SITE_ORIGIN}/app/${app.id}`;
 }
@@ -137,6 +140,10 @@ function deriveMakers(apps: AppRow[]): MakerRow[] {
   const byUser = new Map<string, string | null>();
   for (const app of apps) {
     if (!app.user_id) continue;
+    // Apps published under an admin override are hidden from the real
+    // /maker/<user_id> page (see useApprovedAppsByMaker), so they must not
+    // anchor a maker URL in the sitemap either.
+    if (app.display_username) continue;
     const lm = isoDate(app.updated_at) ?? isoDate(app.created_at);
     const prev = byUser.get(app.user_id);
     if (prev === undefined || (lm && (!prev || lm > prev))) {
@@ -254,7 +261,7 @@ Deno.serve(async (req) => {
   const { data, error } = await supabase
     .from("apps")
     .select(
-      "id, user_id, slug, tags, updated_at, created_at, " +
+      "id, user_id, slug, tags, updated_at, created_at, display_username, " +
         "maker:public_profiles(username)",
     )
     .eq("status", "approved")

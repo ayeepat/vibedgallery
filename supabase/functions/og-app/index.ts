@@ -41,22 +41,22 @@ interface AppRow {
   tags: string[] | null;
   created_at: string | null;
   status: string;
+  // Admin-only per-app override; wins over the embedded maker handle.
+  display_username: string | null;
   // Embedded maker handle via apps.user_id -> profiles.id FK.
   maker: { username: string | null } | null;
 }
 
-// Columns + embedded maker handle. Shared by both lookup paths so either can
-// build the canonical pretty URL. We embed the public_profiles VIEW (not
-// profiles) since anon is RLS-blocked from reading profiles directly; PostgREST
-// resolves the relationship via the apps.user_id -> profiles.id FK.
 const APP_SELECT =
-  "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, " +
+  "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, display_username, " +
   "maker:public_profiles(username)";
 
 // Canonical URL for an app: the pretty /<username>/<slug> when both are known,
 // else the legacy /app/<id> (which the SPA redirects to the pretty URL).
+// display_username (admin override) wins so social cards link to the public
+// handle, not the admin's real profile.
 function canonicalUrl(app: AppRow): string {
-  const username = app.maker?.username;
+  const username = app.display_username || app.maker?.username;
   if (username && app.slug) return `${SITE_ORIGIN}/${username}/${app.slug}`;
   return `${SITE_ORIGIN}/app/${app.id}`;
 }
@@ -258,32 +258,55 @@ Deno.serve(async (req) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let query = supabase.from("apps").select(APP_SELECT).eq("status", "approved");
+  let row: AppRow | null = null;
   if (hasId) {
-    query = query.eq("id", id);
-  } else {
-    // username lives on the embedded profiles row; !inner makes it a filterable
-    // join. (username, slug) is globally unique.
-    query = supabase
+    const { data, error } = await supabase
       .from("apps")
-      .select(
-        "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, " +
-          "maker:public_profiles!inner(username)",
-      )
+      .select(APP_SELECT)
+      .eq("status", "approved")
+      .eq("id", id)
+      .maybeSingle<AppRow>();
+    if (error) {
+      console.error("og-app: lookup failed", error);
+      return htmlResponse(buildNotFound(), 500);
+    }
+    row = data;
+  } else {
+    // Two passes mirror the SPA's useAppByHandle: admin override
+    // (display_username) first, then the embedded profile handle.
+    const overrideRes = await supabase
+      .from("apps")
+      .select(APP_SELECT)
       .eq("status", "approved")
       .eq("slug", slug)
-      .eq("maker.username", username);
+      .eq("display_username", username)
+      .maybeSingle<AppRow>();
+    if (overrideRes.error) {
+      console.error("og-app: lookup failed", overrideRes.error);
+      return htmlResponse(buildNotFound(), 500);
+    }
+    if (overrideRes.data) {
+      row = overrideRes.data;
+    } else {
+      const { data, error } = await supabase
+        .from("apps")
+        .select(
+          "id, slug, title, tagline, description, category, primary_tool, thumbnail_url, tags, created_at, status, display_username, " +
+            "maker:public_profiles!inner(username)",
+        )
+        .eq("status", "approved")
+        .eq("slug", slug)
+        .eq("maker.username", username)
+        .is("display_username", null)
+        .maybeSingle<AppRow>();
+      if (error) {
+        console.error("og-app: lookup failed", error);
+        return htmlResponse(buildNotFound(), 500);
+      }
+      row = data;
+    }
   }
 
-  const { data, error } = await query.maybeSingle<AppRow>();
-
-  if (error) {
-    console.error("og-app: lookup failed", error);
-    return htmlResponse(buildNotFound(), 500);
-  }
-  if (!data) {
-    return htmlResponse(buildNotFound(), 404);
-  }
-
-  return htmlResponse(buildPage(data));
+  if (!row) return htmlResponse(buildNotFound(), 404);
+  return htmlResponse(buildPage(row));
 });

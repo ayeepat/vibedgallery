@@ -19,6 +19,7 @@ export const APP_SELECT_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, thumbnail_url, screenshot_urls, ' +
   'verification_token, ownership_verified, slug, ' +
+  'display_username, display_name, ' +
   'safe_browsing_passed, safe_browsing_threats, thumbnail_flagged, ' +
   'status, rejection_reason, reviewed_by, reviewed_at, ' +
   'submitter_twitter, submitter_github, ' +
@@ -37,6 +38,7 @@ export const APP_PUBLIC_COLUMNS =
   'id, user_id, title, tagline, description, url, category, tags, ' +
   'primary_tool, other_tools, demo_video_url, ' +
   'thumbnail_url, screenshot_urls, slug, status, ' +
+  'display_username, display_name, ' +
   'submitter_twitter, submitter_github, ' +
   'ownership_verified, upvotes, views, created_at'
 
@@ -79,7 +81,10 @@ function normalizeApp(row) {
     // Pretty-URL parts. `username` comes from the embedded maker (or a flat
     // `username` column when a caller already joined it); both feed appPath().
     slug: row.slug ?? null,
-    username: row.maker?.username ?? row.username ?? null,
+    // display_username (admin override) wins so the public sees the override
+    // handle, not the admin's real profile handle.
+    username: row.display_username || row.maker?.username || row.username || null,
+    display_name: row.display_name || null,
   }
 }
 
@@ -214,17 +219,26 @@ export function useAppByHandle(username, slug) {
   return useQuery({
     queryKey: ['app', 'handle', u, s],
     queryFn: async () => {
-      // No approved-only filter — RLS governs visibility (anon sees only
-      // approved rows; an owner/admin can resolve their own pending app), which
-      // keeps the legacy /app/:id -> pretty-URL redirect valid in every case.
-      // Rejected rows ARE excluded: the slug unique index ignores them, so an
-      // owner could otherwise see two of their own rows match and break
-      // maybeSingle().
+      // Two passes: an admin override (display_username) wins over the real
+      // maker handle. We try the override first (cheap — no join), then fall
+      // back to matching the embedded public_profiles row. Rejected rows are
+      // excluded so an owner with a re-used slug doesn't get two matches.
+      const overrideRes = await supabase
+        .from('apps')
+        .select(`${APP_PUBLIC_COLUMNS}, ${MAKER_EMBED}`)
+        .eq('slug', s)
+        .eq('display_username', u)
+        .neq('status', 'rejected')
+        .maybeSingle()
+      if (overrideRes.error) throw overrideRes.error
+      if (overrideRes.data) return normalizeApp(overrideRes.data)
+
       const { data, error } = await supabase
         .from('apps')
         .select(`${APP_PUBLIC_COLUMNS}, maker:public_profiles!inner(username)`)
         .eq('slug', s)
         .eq('maker.username', u)
+        .is('display_username', null)
         .neq('status', 'rejected')
         .maybeSingle()
       if (error) throw error
@@ -234,7 +248,9 @@ export function useAppByHandle(username, slug) {
   })
 }
 
-// All approved apps for a given maker (user_id), newest first.
+// All approved apps for a given maker (user_id), newest first. Excludes
+// admin-overridden rows (display_username IS NOT NULL) so a real maker page
+// never surfaces apps that were published under a fictitious handle.
 export function useApprovedAppsByMaker(userId) {
   return useQuery({
     queryKey: ['apps', 'maker', userId],
@@ -244,6 +260,7 @@ export function useApprovedAppsByMaker(userId) {
         .select(APP_PUBLIC_SELECT)
         .eq('status', 'approved')
         .eq('user_id', userId)
+        .is('display_username', null)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data || []).map(normalizeApp)

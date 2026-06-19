@@ -8,7 +8,7 @@ import AppImage from "@/components/AppImage";
 // link straight from a search result.
 const SEARCH_COLUMNS =
   "id, title, tagline, category, primary_tool, thumbnail_url, slug, " +
-  "maker:public_profiles(username)";
+  "display_username, maker:public_profiles(username)";
 
 export default function SearchBar() {
   const navigate = useNavigate();
@@ -184,7 +184,7 @@ export default function SearchBar() {
   const goToApp = (app) => {
     setQuery("");
     setOpen(false);
-    navigate(appPath({ id: app.id, slug: app.slug, username: app.maker?.username }));
+    navigate(appPath({ id: app.id, slug: app.slug, username: app.display_username || app.maker?.username }));
   };
 
   // Run a full gallery search for the term (the /gallery?q= filter), instead of

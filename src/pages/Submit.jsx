@@ -250,7 +250,7 @@ function HandleHint({ status }) {
 // ─── Main ─────────────────────────────────────────────────────
 export default function Submit() {
   // <ProtectedRoute> guarantees the user is signed in before this mounts.
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, isAdmin } = useAuth();
 
   usePageMeta({
     title: "Submit Your App",
@@ -264,6 +264,9 @@ export default function Submit() {
     category: "", tags: "", primaryTool: "", otherTools: "",
     demoVideoUrl: "", twitterHandle: "", githubRepo: "",
     username: "", slug: "",
+    // Admin-only optional override for the "By <name>" credit line. The
+    // username field above doubles as the URL handle override for admins.
+    adminDisplayName: "",
     ownershipConfirmed: false,
   };
 
@@ -350,17 +353,19 @@ export default function Submit() {
   // submit-time validator (isValidUsername/isValidSlug) enforces the full rule.
   const cleanHandle = (v) => String(v).toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
 
-  // Pre-fill the username from the maker's saved handle (or a slug of their
-  // display name) the first time the form has none — they reuse one handle
-  // across all their apps.
+  // Pre-fill the username from the maker's saved handle the first time the
+  // form has none — non-admins reuse one handle across all their apps. Admins
+  // start blank: each submission picks a fresh display_username override, so
+  // pre-filling the admin's real handle would defeat the point.
   useEffect(() => {
     if (!profile) return;
+    if (isAdmin) return;
     setForm((f) => {
       if (f.username) return f;
       const seed = profile.username || slugify(profile.name) || "";
       return seed ? { ...f, username: seed } : f;
     });
-  }, [profile]);
+  }, [profile, isAdmin]);
 
   // Until the user hand-edits the slug, keep it tracking the app title.
   useEffect(() => {
@@ -370,49 +375,61 @@ export default function Submit() {
   }, [form.title, slugEdited]);
 
   // Debounced username availability + format check (global, case-insensitive).
+  // Admin override handles are stored on the app row (display_username), not
+  // on a profile, so the lookup also checks that no other app already claims
+  // the handle. For non-admins the check is unchanged.
   useEffect(() => {
     const u = form.username;
     if (!u) { setUsernameStatus(""); return; }
     if (RESERVED_USERNAMES.has(u)) { setUsernameStatus("That username is reserved"); return; }
     if (!isValidUsername(u)) { setUsernameStatus("3–30 chars: a–z, 0–9, - or _"); return; }
-    // Unchanged from the maker's saved handle — definitely available to them.
-    if (profile?.username && profile.username.toLowerCase() === u) { setUsernameStatus("ok"); return; }
+    if (!isAdmin && profile?.username && profile.username.toLowerCase() === u) {
+      setUsernameStatus("ok"); return;
+    }
     setUsernameStatus("checking");
     const t = setTimeout(async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", u)
-        .maybeSingle();
-      if (error) { setUsernameStatus(""); return; }
-      if (data && data.id !== user?.id) setUsernameStatus("That username is taken");
-      else setUsernameStatus("ok");
+      const [profilesRes, appsRes] = await Promise.all([
+        supabase.from("profiles").select("id").eq("username", u).maybeSingle(),
+        supabase.from("apps").select("id, user_id").eq("display_username", u).neq("status", "rejected").limit(1).maybeSingle(),
+      ]);
+      if (profilesRes.error) { setUsernameStatus(""); return; }
+      if (profilesRes.data && profilesRes.data.id !== user?.id) {
+        setUsernameStatus("That username is taken"); return;
+      }
+      if (appsRes.data && (!isAdmin || appsRes.data.user_id !== user?.id)) {
+        setUsernameStatus("That username is taken"); return;
+      }
+      setUsernameStatus("ok");
     }, 450);
     return () => clearTimeout(t);
-  }, [form.username, profile?.username, user?.id]);
+  }, [form.username, profile?.username, user?.id, isAdmin]);
 
-  // Debounced slug availability + format check (unique within this maker).
+  // Debounced slug availability + format check. Unique within the public
+  // handle: per (display_username) for an admin override, per user_id
+  // otherwise — mirrors the apps_public_handle_slug_lower_live_key index.
   useEffect(() => {
     const s = form.slug;
     if (!s) { setSlugStatus(""); return; }
     if (!isValidSlug(s)) { setSlugStatus("1–60 chars: a–z, 0–9, - or _"); return; }
     setSlugStatus("checking");
+    const useOverride = isAdmin && !!form.username;
     const t = setTimeout(async () => {
-      // Rejected rows don't block slug reuse (the unique index excludes them)
-      // — otherwise a resubmit could never keep its original link.
-      const { data, error } = await supabase
+      // Rejected rows don't block slug reuse (the unique index excludes them).
+      let query = supabase
         .from("apps")
         .select("id")
-        .eq("user_id", user.id)
         .eq("slug", s)
-        .neq("status", "rejected")
-        .maybeSingle();
+        .neq("status", "rejected");
+      query = useOverride
+        ? query.eq("display_username", form.username)
+        : query.eq("user_id", user.id).is("display_username", null);
+      const { data, error } = await query.maybeSingle();
       if (error) { setSlugStatus(""); return; }
       if (data) setSlugStatus("You already have an app with this link");
       else setSlugStatus("ok");
     }, 450);
     return () => clearTimeout(t);
-  }, [form.slug, user?.id]);
+  }, [form.slug, form.username, isAdmin, user?.id]);
 
   // Auto-save
   useEffect(() => {
@@ -521,12 +538,13 @@ export default function Submit() {
 
       const appUrl = normalizeUrl(form.url);
 
-      // Claim the maker handle before doing any expensive upload work. It's
-      // saved to the profile so it's reused across all the maker's apps; the
-      // DB's unique index is the final authority (the live check above is just
-      // UX). Skip the write when it already matches their saved handle.
+      // Claim the maker handle before doing any expensive upload work. For
+      // admins, the entered username is a per-app override stored on the app
+      // row (display_username) — we do NOT touch the admin's profile so their
+      // other apps keep their existing handles. For everyone else the handle
+      // is saved to their profile and reused across submissions.
       const wantUsername = form.username.trim();
-      if (profile?.username?.toLowerCase() !== wantUsername) {
+      if (!isAdmin && profile?.username?.toLowerCase() !== wantUsername) {
         try {
           await updateProfile({ username: wantUsername });
         } catch (err) {
@@ -628,6 +646,12 @@ export default function Submit() {
         .from("apps")
         .insert({
           user_id: user.id,
+          // Admin-only handle override. A trigger enforces the admin check
+          // server-side; passing these as a non-admin would error.
+          display_username: isAdmin ? wantUsername : null,
+          display_name: isAdmin && form.adminDisplayName.trim()
+            ? form.adminDisplayName.trim()
+            : null,
           // submitter_email is set server-side by the apps_set_submitter_email
           // trigger from auth.users; the column is also revoked from clients.
           submitter_twitter: form.twitterHandle || null,
@@ -1041,9 +1065,23 @@ export default function Submit() {
               </div>
 
               <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">Your Public Link</span>
+                <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171]">
+                  {isAdmin ? "Your Public Link · Admin Override" : "Your Public Link"}
+                </span>
               </div>
               <div className="border border-[#E5E5E5] mx-8 mt-6 mb-6">
+                {isAdmin && (
+                  <div className="px-4 py-3 border-b border-[#E5E5E5] bg-black text-white">
+                    <p className="text-[9px] font-bold uppercase tracking-widest mb-1">Admin mode</p>
+                    <p className="text-[10px] leading-relaxed text-[#CCCCCC]">
+                      The handle below is saved only on this app — your profile
+                      and other apps are not touched. The maker line on the
+                      detail page will show the display name (if set) and
+                      won't link back to your account.
+                    </p>
+                  </div>
+                )}
+
                 {/* Live preview of the shareable URL */}
                 <div className="px-4 py-3 border-b border-[#E5E5E5] bg-[#FAFAFA]">
                   <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171] block mb-1.5">
@@ -1055,7 +1093,7 @@ export default function Submit() {
                   </p>
                 </div>
 
-                <Field label="Username (your handle)" required>
+                <Field label={isAdmin ? "Username (handle for THIS app)" : "Username (your handle)"} required>
                   <input
                     type="text"
                     value={form.username}
@@ -1088,6 +1126,19 @@ export default function Submit() {
                 {errors.slug
                   ? <FieldError msg={errors.slug} />
                   : <HandleHint status={slugStatus} />}
+
+                {isAdmin && (
+                  <Field label="Display name (shown on the app page)">
+                    <input
+                      type="text"
+                      value={form.adminDisplayName}
+                      onChange={(e) => set("adminDisplayName", e.target.value)}
+                      placeholder="Optional — e.g. Jane Doe"
+                      maxLength={60}
+                      className="w-full px-4 pb-3 pt-1 text-xs text-black bg-white placeholder:text-[#AAAAAA] focus:outline-none"
+                    />
+                  </Field>
+                )}
               </div>
 
               <div className="px-8 py-4 border-y border-[#E5E5E5] bg-[#F5F5F5]">
