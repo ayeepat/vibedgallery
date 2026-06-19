@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import { useApprovedApps } from "@/lib/useApps";
 import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
+import AppImage from "@/components/AppImage";
 
 const MARQUEE_NAMES = [
   "LET HIM COOK AI", "ST: FREELANCER", "PIXVEC", "SPORTSPOOL", "NOTENOTES", "FLUENTCODE",
@@ -164,8 +165,9 @@ export default function Home() {
             >
               <Link to={appPath(app)} className="block group">
                 <div className="relative aspect-video overflow-hidden bg-[#F0F0F0]">
-                  <img
+                  <AppImage
                     src={app.image}
+                    name={app.name}
                     alt={app.name ? `${app.name} preview` : "App preview"}
                     loading="lazy"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

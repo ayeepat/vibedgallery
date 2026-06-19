@@ -8,6 +8,7 @@ import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import BookmarkButton from "@/components/BookmarkButton";
+import AppImage from "@/components/AppImage";
 
 // Tag-based landing page. URL is /tag/:tag — the tag arrives URL-encoded so we
 // decode it once and use the canonical form throughout (page title, hook, link
@@ -119,8 +120,9 @@ export default function Tag() {
                     className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
                   >
                     <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
-                      <img
+                      <AppImage
                         src={app.image}
+                        name={app.name}
                         alt={app.name ? `${app.name} preview` : "App preview"}
                         loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

@@ -9,6 +9,7 @@ import { appPath } from "@/lib/urlHelpers";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 import BookmarkButton from "@/components/BookmarkButton";
+import AppImage from "@/components/AppImage";
 
 const SORTS = ["Newest", "Trending", "Most Viewed"];
 // Mirrors CATEGORIES in src/pages/Submit.jsx so the dropdown can never offer
@@ -47,7 +48,6 @@ export default function Gallery() {
 
   const [sort, setSort] = useState("Newest");
   const [category, setCategory] = useState(ALL_CATEGORIES);
-  const [hoveredId, setHoveredId] = useState(null);
 
   const clearQuery = () => {
     const next = new URLSearchParams(searchParams);
@@ -228,13 +228,12 @@ export default function Gallery() {
                 <Link
                   to={appPath(app)}
                   className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
-                  onMouseEnter={() => setHoveredId(app.id)}
-                  onMouseLeave={() => setHoveredId(null)}
                 >
                   {/* 16:9 thumbnail */}
                   <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
-                    <img
+                    <AppImage
                       src={app.image}
+                      name={app.name}
                       alt={app.name ? `${app.name} preview` : "App preview"}
                       loading="lazy"
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -248,11 +247,9 @@ export default function Gallery() {
                         <span className="text-black">✓</span> Verified
                       </span>
                     )}
-                    {/* Hover description overlay */}
-                    <div
-                      className="absolute inset-0 bg-black/80 flex flex-col justify-end p-4 transition-opacity duration-200"
-                      style={{ opacity: hoveredId === app.id ? 1 : 0 }}
-                    >
+                    {/* Hover description overlay — pure CSS group-hover so hovering
+                        a card never re-renders the whole grid. */}
+                    <div className="absolute inset-0 bg-black/80 flex flex-col justify-end p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                       <p className="text-[11px] text-white leading-snug">{app.tagline}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <span className="text-[9px] font-bold uppercase tracking-widest text-white/50 border border-white/20 px-1.5 py-0.5">

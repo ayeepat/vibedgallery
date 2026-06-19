@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
+import { sanitizeRedirectPath } from "@/lib/urlHelpers";
 import { Loader2 } from "lucide-react";
 import Turnstile from "@/components/Turnstile";
 import { verifyTurnstile } from "@/lib/edgeFunctions";
@@ -17,6 +18,11 @@ export default function Register() {
 
   const { register, verifyOtp, resendOtp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Honor a ?from= bounce (set by ProtectedRoute / a "register" link from a
+  // gated action) so a new user lands where they were headed, not on home.
+  // Same-origin paths only — sanitizeRedirectPath blocks open redirects.
+  const redirectTarget = sanitizeRedirectPath(searchParams.get("from"));
 
   // Two steps: 'register' → fill form | 'verify' → enter OTP
   const [step, setStep]           = useState("register");
@@ -37,7 +43,7 @@ export default function Register() {
     setError("");
     setOauthLoading(provider);
     try {
-      await signInWithProvider(provider, { redirectPath: "/" });
+      await signInWithProvider(provider, { redirectPath: redirectTarget });
     } catch (err) {
       setError(err.message || `Could not start ${provider} sign in.`);
       setOauthLoading("");
@@ -125,7 +131,7 @@ export default function Register() {
 
     try {
       await verifyOtp(email, otp);
-      navigate("/");
+      navigate(redirectTarget, { replace: true });
     } catch (err) {
       if (
         err.message.includes("expired") ||
@@ -275,7 +281,7 @@ export default function Register() {
 
           {/* Already confirmed via email link */}
           <Link
-            to="/login"
+            to={redirectTarget !== "/" ? `/login?from=${encodeURIComponent(redirectTarget)}` : "/login"}
             className="mt-8 text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:text-black transition-colors text-left"
           >
             Confirmed via email link? Sign in →
@@ -504,10 +510,10 @@ export default function Register() {
             <div className="flex-1 border-t border-[#E5E5E5]" />
           </div>
 
-          {/* Login CTA */}
+          {/* Login CTA — preserve the post-auth destination across the switch. */}
           <div className="border border-[#E5E5E5]">
             <Link
-              to="/login"
+              to={redirectTarget !== "/" ? `/login?from=${encodeURIComponent(redirectTarget)}` : "/login"}
               className="h-14 flex items-center justify-between px-6 bg-white text-black hover:bg-[#F5F5F5] transition-colors group"
             >
               <span className="text-[10px] font-bold uppercase tracking-widest">

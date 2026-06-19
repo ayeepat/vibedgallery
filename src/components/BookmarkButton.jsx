@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Bookmark } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useBookmarkIds, useToggleBookmark } from "@/lib/useApps";
+import { toast } from "@/components/ui/use-toast";
 
 // Bookmark / save toggle. Two render variants:
 //   - variant="icon"   (default) — square icon-only button (used on the gallery
@@ -35,7 +36,20 @@ export default function BookmarkButton({
       return;
     }
     if (loading) return;
-    toggle.mutate({ appId, currentlyBookmarked: bookmarked });
+    toggle.mutate(
+      { appId, currentlyBookmarked: bookmarked },
+      {
+        // The hook already rolls the optimistic toggle back on error; surface
+        // why it snapped back instead of leaving the user guessing.
+        onError: () => {
+          toast({
+            title: bookmarked ? "Couldn't remove bookmark" : "Couldn't save app",
+            description: "Check your connection and try again.",
+            variant: "destructive",
+          });
+        },
+      }
+    );
   };
 
   const label = bookmarked ? "Saved" : "Save";

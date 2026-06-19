@@ -9,6 +9,7 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import AnalyticsPanel from "@/components/AnalyticsPanel";
 import BookmarkButton from "@/components/BookmarkButton";
+import AppImage from "@/components/AppImage";
 import { SubmissionCardSkeleton, GalleryCardSkeleton } from "@/components/Skeleton";
 import { usePageMeta } from "@/lib/usePageMeta";
 import {
@@ -134,8 +135,9 @@ function SavedTab({ userId }) {
               className="block group focus-visible:outline focus-visible:outline-2 focus-visible:outline-black"
             >
               <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
-                <img
+                <AppImage
                   src={app.image}
+                  name={app.name}
                   alt={app.name ? `${app.name} preview` : "App preview"}
                   loading="lazy"
                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -173,19 +175,12 @@ function SubmissionCard({ app, onAction, loading, hasPendingEdit }) {
     <div className="border border-[#E5E5E5] flex flex-col">
       {/* Thumbnail */}
       <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0] border-b border-[#E5E5E5]">
-        {app.thumbnail_url ? (
-          <img
-            src={app.thumbnail_url}
-            alt={app.title}
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[#AAAAAA]">
-              No Thumbnail
-            </span>
-          </div>
-        )}
+        <AppImage
+          src={app.thumbnail_url}
+          name={app.title}
+          alt={app.title}
+          className="w-full h-full object-cover"
+        />
         <span className={`absolute top-2 left-2 text-[9px] font-bold uppercase tracking-widest bg-white border border-[#E5E5E5] px-2 py-1 ${config.accent}`}>
           {config.label}
         </span>

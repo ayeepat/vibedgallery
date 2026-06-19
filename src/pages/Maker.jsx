@@ -7,6 +7,7 @@ import { appPath } from "@/lib/urlHelpers";
 import { GalleryCardSkeleton } from "@/components/Skeleton";
 import { Loader2 } from "lucide-react";
 import { usePageMeta } from "@/lib/usePageMeta";
+import AppImage from "@/components/AppImage";
 
 const heroVariants = {
   hidden: { opacity: 0, y: 16 },
@@ -168,9 +169,11 @@ export default function Maker() {
                 >
                   <Link to={appPath(app)} className="block group">
                     <div className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0]">
-                      <img
+                      <AppImage
                         src={app.image}
+                        name={app.name}
                         alt={app.name}
+                        loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                       {app.ownership_verified && (

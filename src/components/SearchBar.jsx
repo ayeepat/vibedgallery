@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { appPath, sanitizeSearchTerm } from "@/lib/urlHelpers";
+import AppImage from "@/components/AppImage";
 
 // Columns + embedded maker handle needed to build a pretty /<username>/<slug>
 // link straight from a search result.
@@ -229,7 +230,7 @@ export default function SearchBar() {
           onChange={(e) => { userTypedRef.current = true; setQuery(e.target.value); }}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
           onKeyDown={handleKeyDown}
-          placeholder="Search artifacts..."
+          placeholder="Search apps..."
           className="w-full h-8 px-4 pr-8 text-xs bg-[#F5F5F5] border border-[#E5E5E5] rounded-full placeholder:text-[#AAAAAA] text-black focus:outline-none focus:border-black transition-colors"
         />
 
@@ -268,17 +269,13 @@ export default function SearchBar() {
               }`}
             >
               {/* Thumbnail */}
-              {app.thumbnail_url ? (
-                <div className="w-10 h-10 shrink-0 border border-[#E5E5E5] overflow-hidden">
-                  <img
-                    src={app.thumbnail_url}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-10 h-10 shrink-0 bg-[#F5F5F5] border border-[#E5E5E5]" />
-              )}
+              <div className="w-10 h-10 shrink-0 border border-[#E5E5E5] overflow-hidden">
+                <AppImage
+                  src={app.thumbnail_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              </div>
 
               {/* Text */}
               <div className="flex-1 min-w-0">

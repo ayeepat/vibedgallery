@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Loader2, Eye, ArrowUp, Trophy, Layers } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import AppImage from "@/components/AppImage";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -463,13 +464,11 @@ export default function AnalyticsPanel({ submissions }) {
                   className="flex items-center gap-3 group min-w-0"
                 >
                   <div className="w-10 h-10 flex-shrink-0 bg-[#F0F0F0] border border-[#E5E5E5] overflow-hidden">
-                    {app.thumbnail_url ? (
-                      <img
-                        src={app.thumbnail_url}
-                        alt={app.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : null}
+                    <AppImage
+                      src={app.thumbnail_url}
+                      alt={app.title}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-tight text-black truncate group-hover:underline underline-offset-4">

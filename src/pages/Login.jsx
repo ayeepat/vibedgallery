@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
+import { useApprovedAppCount } from "@/lib/useApps";
 import { sanitizeRedirectPath } from "@/lib/urlHelpers";
 import { Loader2 } from "lucide-react";
 import GoogleIcon from "@/components/GoogleIcon";
@@ -15,6 +16,7 @@ export default function Login() {
   });
 
   const { login, signInWithProvider } = useAuth();
+  const { data: appCount } = useApprovedAppCount();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -101,20 +103,23 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Bottom stat strip */}
+          {/* Bottom stat strip — real numbers only. The app count is fetched
+              live; the cost is a fixed fact. No fabricated "Builders" figure. */}
           <div className="border border-[#E5E5E5]">
             <div className="flex">
               <div className="flex-1 border-r border-[#E5E5E5] p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
                   Apps Listed
                 </p>
-                <p className="text-2xl font-black uppercase mt-1">1+</p>
+                <p className="text-2xl font-black uppercase mt-1">
+                  {typeof appCount === "number" ? appCount.toLocaleString() : "—"}
+                </p>
               </div>
               <div className="flex-1 p-5">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#717171]">
-                  Builders
+                  Cost to Join
                 </p>
-                <p className="text-2xl font-black uppercase mt-1">1+</p>
+                <p className="text-2xl font-black uppercase mt-1">$0</p>
               </div>
             </div>
           </div>
@@ -261,10 +266,11 @@ export default function Login() {
             </Link>
           </div>
 
-          {/* Register CTA */}
+          {/* Register CTA — carry the post-auth destination across so a bounced
+              user who registers instead still lands where they were headed. */}
           <div className="mt-6 border border-[#E5E5E5]">
             <Link
-              to="/register"
+              to={redirectTarget !== "/" ? `/register?from=${encodeURIComponent(redirectTarget)}` : "/register"}
               className="h-14 flex items-center justify-between px-6 bg-white text-black hover:bg-[#F5F5F5] transition-colors group"
             >
               <span className="text-[10px] font-bold uppercase tracking-widest">

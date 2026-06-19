@@ -103,6 +103,24 @@ export function useApprovedApps() {
   })
 }
 
+// Count of approved (publicly listed) apps. Head-only request — no rows are
+// transferred, just the exact count — so it's cheap enough to drive the social
+// proof on the auth screens with a real number instead of a placeholder.
+export function useApprovedAppCount() {
+  return useQuery({
+    queryKey: ['apps', 'approved', 'count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('apps')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'approved')
+      if (error) throw error
+      return count ?? 0
+    },
+    staleTime: 60_000,
+  })
+}
+
 // Server-paginated gallery listing. `sort` is "Newest" | "Trending" and
 // `category` is either a category string or null for all. `q` is an optional
 // free-text query matched against title/tagline/category/primary_tool.

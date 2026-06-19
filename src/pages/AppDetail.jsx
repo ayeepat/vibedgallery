@@ -12,6 +12,8 @@ import { usePageMeta } from "@/lib/usePageMeta";
 import { toggleUpvoteCount, rollbackUpvoteCount, nextUpvoted } from "@/lib/upvote";
 import BookmarkButton from "@/components/BookmarkButton";
 import ReportDialog from "@/components/ReportDialog";
+import AppImage from "@/components/AppImage";
+import { toast } from "@/components/ui/use-toast";
 
 // Returns an embeddable src for YouTube/Vimeo/Loom URLs, or null if the URL
 // isn't a recognized provider (in which case we render a plain link).
@@ -92,6 +94,14 @@ export default function AppDetail() {
   const { data: app, isLoading, error } = id ? byId : byHandle;
 
   const { data: maker } = useMaker(app?.user_id);
+
+  // Single source of truth for the upvote total shown on this screen. The
+  // UpvoteButton drives it optimistically so the "Upvotes" stat in the meta row
+  // can't disagree with the count on the button itself.
+  const [displayUpvotes, setDisplayUpvotes] = useState(0);
+  useEffect(() => {
+    setDisplayUpvotes(app?.upvotes ?? 0);
+  }, [app?.upvotes]);
 
   // Legacy /app/:id links redirect to the canonical pretty URL once the maker
   // handle + slug resolve, so shared/old links land on /<username>/<slug>.
@@ -213,8 +223,9 @@ export default function AppDetail() {
 
         {/* Thumbnail */}
         <div className="mt-6 relative w-full aspect-video overflow-hidden bg-[#F0F0F0] border border-[#E5E5E5]">
-          <img
+          <AppImage
             src={app.image}
+            name={app.name}
             alt={app.name}
             className="w-full h-full object-cover"
           />
@@ -262,7 +273,12 @@ export default function AppDetail() {
 
           <div className="flex flex-col gap-2 shrink-0">
             {/* Upvote */}
-            <UpvoteButton appId={app.id} initialCount={app.upvotes} returnPath={appPath(app)} />
+            <UpvoteButton
+              appId={app.id}
+              initialCount={app.upvotes}
+              returnPath={appPath(app)}
+              onCountChange={setDisplayUpvotes}
+            />
             {/* Save / bookmark */}
             <BookmarkButton appId={app.id} variant="block" />
             {/* Visit */}
@@ -344,7 +360,7 @@ export default function AppDetail() {
                   rel="noopener noreferrer"
                   className="relative w-full aspect-video overflow-hidden bg-[#F0F0F0] border border-[#E5E5E5] group"
                 >
-                  <img
+                  <AppImage
                     src={src}
                     alt={`${app.name} screenshot ${i + 1}`}
                     loading="lazy"
@@ -410,7 +426,7 @@ export default function AppDetail() {
           {[
             { label: "Category", value: app.category },
             { label: "Built With", value: app.tool },
-            { label: "Upvotes", value: app.upvotes ?? 0 },
+            { label: "Upvotes", value: displayUpvotes },
             { label: "Views", value: app.views ?? 0 },
           ].map((item, i, arr) => (
             <div
@@ -429,7 +445,7 @@ export default function AppDetail() {
   );
 }
 
-function UpvoteButton({ appId, initialCount, returnPath }) {
+function UpvoteButton({ appId, initialCount, returnPath, onCountChange }) {
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -477,8 +493,10 @@ function UpvoteButton({ appId, initialCount, returnPath }) {
 
     // Optimistic update — flip immediately, roll back if the server rejects.
     const wasUpvoted = upvoted;
+    const optimistic = toggleUpvoteCount(count, wasUpvoted);
     setUpvoted(nextUpvoted(wasUpvoted));
-    setCount((c) => toggleUpvoteCount(c, wasUpvoted));
+    setCount(optimistic);
+    onCountChange?.(optimistic);
     setLoading(true);
 
     try {
@@ -503,10 +521,18 @@ function UpvoteButton({ appId, initialCount, returnPath }) {
       queryClient.invalidateQueries({ queryKey: ["app"] });
       queryClient.invalidateQueries({ queryKey: ["apps", "approved"] });
     } catch (err) {
-      // Roll back the optimistic update.
+      // Roll back the optimistic update and tell the user why it snapped back —
+      // a silent revert reads as "my click didn't register."
+      const rolledBack = rollbackUpvoteCount(optimistic, wasUpvoted);
       setUpvoted(wasUpvoted);
-      setCount((c) => rollbackUpvoteCount(c, wasUpvoted));
+      setCount(rolledBack);
+      onCountChange?.(rolledBack);
       console.error("Upvote failed:", err);
+      toast({
+        title: wasUpvoted ? "Couldn't remove your upvote" : "Couldn't save your upvote",
+        description: "Check your connection and try again.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

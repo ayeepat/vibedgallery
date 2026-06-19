@@ -7,6 +7,7 @@ import { checkUrlSafety } from "@/lib/safeBrowsing";
 import { APP_SELECT_COLUMNS } from "@/lib/useApps";
 import { sanitizeSearchTerm, safeHttpUrl } from "@/lib/urlHelpers";
 import Nav from "@/components/Nav";
+import AppImage from "@/components/AppImage";
 import { Loader2, Check, X, ExternalLink, Search, ShieldCheck, Flag, Pencil } from "lucide-react";
 
 const STATUS_COLORS = {
@@ -413,8 +414,9 @@ export default function Admin() {
                 {/* Thumbnail */}
                 {selected.thumbnail_url && (
                   <div className="border border-[#E5E5E5] aspect-video overflow-hidden mb-6 max-w-md">
-                    <img
+                    <AppImage
                       src={selected.thumbnail_url}
+                      name={selected.title}
                       alt={selected.title}
                       className="w-full h-full object-cover"
                     />
@@ -495,7 +497,7 @@ export default function Admin() {
                     <div className="grid grid-cols-2 gap-3">
                       {selected.screenshot_urls.map((url, i) => (
                         <div key={i} className="border border-[#E5E5E5] aspect-video overflow-hidden">
-                          <img src={url} alt={`${selected.title || "App"} screenshot ${i + 1}`} className="w-full h-full object-cover" />
+                          <AppImage src={url} alt={`${selected.title || "App"} screenshot ${i + 1}`} className="w-full h-full object-cover" />
                         </div>
                       ))}
                     </div>
@@ -862,7 +864,7 @@ function ValueCell({ value, kind }) {
   if (kind === "image") {
     return (
       <div className="border border-[#E5E5E5] aspect-video w-48 overflow-hidden">
-        <img src={value} alt="" className="w-full h-full object-cover" />
+        <AppImage src={value} alt="" className="w-full h-full object-cover" />
       </div>
     )
   }
@@ -871,7 +873,7 @@ function ValueCell({ value, kind }) {
       <div className="grid grid-cols-2 gap-2">
         {value.map((u, i) => (
           <div key={i} className="border border-[#E5E5E5] aspect-video overflow-hidden">
-            <img src={u} alt="" className="w-full h-full object-cover" />
+            <AppImage src={u} alt="" className="w-full h-full object-cover" />
           </div>
         ))}
       </div>
