@@ -26,6 +26,7 @@ const Home           = lazy(() => import('./pages/Home'));
 const Gallery        = lazy(() => import('./pages/Gallery'));
 const AppDetail      = lazy(() => import('./pages/AppDetail'));
 const HowItWorks     = lazy(() => import('./pages/HowItWorks'));
+const Ideas          = lazy(() => import('./pages/Ideas'));
 const Submit         = lazy(() => import('./pages/Submit'));
 const EditApp        = lazy(() => import('./pages/EditApp'));
 const Admin          = lazy(() => import('./pages/Admin'));
@@ -55,6 +56,7 @@ function AnimatedRoutes() {
           <Route path="/tag/:tag"        element={wrap(<Tag />)} />
           <Route path="/maker/:userId"   element={wrap(<Maker />)} />
           <Route path="/how-it-works"    element={wrap(<HowItWorks />)} />
+          <Route path="/ideas"           element={wrap(<Ideas />)} />
           <Route path="/about"           element={wrap(<About />)} />
 
           {/* Auth */}

@@ -59,6 +59,10 @@ export default function Nav({ hideSearch = false }) {
           How It Works
         </Link>
 
+        <Link to="/ideas" className={navLinkClass("/ideas")}>
+          Ideas
+        </Link>
+
         {/* Search — now a real component */}
         {!hideSearch && <SearchBar />}
 
@@ -175,6 +179,12 @@ export default function Nav({ hideSearch = false }) {
             className="h-12 px-6 flex items-center border-b border-[#E5E5E5] text-[10px] font-bold uppercase tracking-widest text-black hover:bg-[#F5F5F5] transition-colors"
           >
             How It Works
+          </Link>
+          <Link
+            to="/ideas"
+            className="h-12 px-6 flex items-center border-b border-[#E5E5E5] text-[10px] font-bold uppercase tracking-widest text-black hover:bg-[#F5F5F5] transition-colors"
+          >
+            Ideas
           </Link>
           {pathname === "/submit" ? (
             <button

@@ -53,7 +53,7 @@ export const RESERVED_USERNAMES = new Set([
   "app", "apps", "maker", "makers", "tag", "tags", "auth", "gallery", "submit",
   "admin", "profile", "login", "register", "about", "how-it-works",
   "forgot-password", "reset-password", "privacy", "terms", "api", "www",
-  "sitemap", "assets", "static", "public", "og-app",
+  "sitemap", "assets", "static", "public", "og-app", "ideas",
 ]);
 
 const USERNAME_RE = /^[a-z0-9](?:[a-z0-9_-]{1,28}[a-z0-9])$/; // 3–30 chars

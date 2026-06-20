@@ -2,8 +2,11 @@
 // Inspired by react-hot-toast library
 import { useState, useEffect } from "react";
 
-const TOAST_LIMIT = 20;
-const TOAST_REMOVE_DELAY = 1000000;
+const TOAST_LIMIT = 3;
+// Time a toast stays visible before auto-dismissing, and the short grace period
+// after dismiss before it's removed from the DOM (for the fade-out).
+const TOAST_AUTO_DISMISS = 5000;
+const TOAST_REMOVE_DELAY = 300;
 
 const actionTypes = {
   ADD_TOAST: "ADD_TOAST",
@@ -134,6 +137,12 @@ function toast({ ...props }) {
       },
     },
   });
+
+  // Auto-dismiss after a few seconds. This is a non-Radix store, so nothing
+  // else expires the toast — without this it would stay on screen forever.
+  if (TOAST_AUTO_DISMISS !== Infinity) {
+    setTimeout(dismiss, props.duration ?? TOAST_AUTO_DISMISS);
+  }
 
   return {
     id,
