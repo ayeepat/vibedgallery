@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, ArrowBigUp, MessageCircle, Lightbulb, Send } from "lucide-react";
 import Nav from "@/components/Nav";
@@ -235,6 +235,8 @@ export default function Ideas() {
     path: "/ideas",
   });
 
+  const [sort, setSort] = useState("newest");
+
   const {
     data,
     isLoading,
@@ -246,7 +248,19 @@ export default function Ideas() {
   const { data: myVotes } = useMyIdeaVotes(user?.id);
   const toggleVote = useToggleIdeaVote(user?.id);
 
-  const requests = data?.pages.flatMap((p) => p.rows) ?? [];
+  const total = data?.pages?.[0]?.total ?? null;
+
+  // Server returns newest-first. "Top" re-ranks the loaded set by vote count
+  // (tie-break newest) on the client — fine at this volume.
+  const requests = useMemo(() => {
+    const rows = data?.pages.flatMap((p) => p.rows) ?? [];
+    if (sort !== "top") return rows;
+    return [...rows].sort(
+      (a, b) =>
+        b.voteCount - a.voteCount ||
+        new Date(b.created_at) - new Date(a.created_at)
+    );
+  }, [data, sort]);
 
   const handleVote = (req, voted) => {
     if (!isAuthenticated) {
@@ -277,60 +291,97 @@ export default function Ideas() {
           </p>
         </div>
 
-        <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 space-y-6">
-          {/* Composer or sign-in prompt */}
-          {isAuthenticated ? (
-            <Composer userId={user.id} />
-          ) : (
-            <div className="border border-[#E5E5E5] px-4 py-5 text-center">
-              <p className="text-sm text-[#717171] mb-3">Sign in to post an idea or reply to one.</p>
-              <Link
-                to="/login"
-                className="inline-flex h-9 px-6 items-center bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors"
-              >
-                Sign In
-              </Link>
+        <div className="max-w-2xl mx-auto px-4 md:px-6 py-6 space-y-10">
+          {/* ── 1 · POST AN IDEA (the action) ─────────────────────────── */}
+          <section>
+            <div className="flex items-baseline gap-2 mb-3">
+              <h2 className="text-[10px] font-bold uppercase tracking-widest text-black">Post an idea</h2>
+              <span className="text-[10px] text-[#AAAAAA]">— the app you wish existed</span>
             </div>
-          )}
+            {isAuthenticated ? (
+              <Composer userId={user.id} />
+            ) : (
+              <div className="border border-[#E5E5E5] px-4 py-5 text-center">
+                <p className="text-sm text-[#717171] mb-3">Sign in to post an idea or reply to one.</p>
+                <Link
+                  to="/login"
+                  className="inline-flex h-9 px-6 items-center bg-black text-white text-[10px] font-bold uppercase tracking-widest hover:bg-[#222] transition-colors"
+                >
+                  Sign In
+                </Link>
+              </div>
+            )}
+          </section>
 
-          {/* Feed */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-5 h-5 animate-spin text-[#717171]" />
+          {/* ── 2 · THE BOARD (existing posts) ────────────────────────── */}
+          <section>
+            <div className="flex items-center justify-between border-b border-[#E5E5E5] pb-3 mb-5">
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-[10px] font-bold uppercase tracking-widest text-black">Community ideas</h2>
+                {total != null && (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-[#717171] bg-[#F5F5F5] border border-[#E5E5E5] px-1.5 py-0.5">
+                    {total}
+                  </span>
+                )}
+              </div>
+              {requests.length > 1 && (
+                <div className="flex border border-[#E5E5E5]">
+                  {["newest", "top"].map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSort(key)}
+                      className={`h-7 px-3 text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                        sort === key
+                          ? "bg-black text-white"
+                          : "text-[#717171] hover:text-black"
+                      }`}
+                    >
+                      {key === "newest" ? "Newest" : "Top"}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : isError ? (
-            <p className="text-center text-sm text-[#717171] py-16">Couldn't load ideas. Refresh to try again.</p>
-          ) : requests.length === 0 ? (
-            <div className="border border-dashed border-[#E5E5E5] px-4 py-16 text-center">
-              <Lightbulb className="w-6 h-6 text-[#AAAAAA] mx-auto mb-3" />
-              <p className="text-sm text-[#717171]">No ideas yet. Be the first to wish something into existence.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {requests.map((req) => (
-                <RequestCard
-                  key={req.id}
-                  req={req}
-                  userId={user?.id}
-                  myVotes={myVotes}
-                  onVote={handleVote}
-                />
-              ))}
-            </div>
-          )}
 
-          {hasNextPage && (
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-                className="h-9 px-6 flex items-center gap-2 border border-[#E5E5E5] text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:border-black hover:text-black transition-colors disabled:opacity-50"
-              >
-                {isFetchingNextPage && <Loader2 className="w-3 h-3 animate-spin" />}
-                Load more
-              </button>
-            </div>
-          )}
+            {isLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="w-5 h-5 animate-spin text-[#717171]" />
+              </div>
+            ) : isError ? (
+              <p className="text-center text-sm text-[#717171] py-16">Couldn't load ideas. Refresh to try again.</p>
+            ) : requests.length === 0 ? (
+              <div className="border border-dashed border-[#E5E5E5] px-4 py-16 text-center">
+                <Lightbulb className="w-6 h-6 text-[#AAAAAA] mx-auto mb-3" />
+                <p className="text-sm text-[#717171]">No ideas yet. Be the first to wish something into existence.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {requests.map((req) => (
+                  <RequestCard
+                    key={req.id}
+                    req={req}
+                    userId={user?.id}
+                    myVotes={myVotes}
+                    onVote={handleVote}
+                  />
+                ))}
+              </div>
+            )}
+
+            {hasNextPage && (
+              <div className="flex justify-center pt-6">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="h-9 px-6 flex items-center gap-2 border border-[#E5E5E5] text-[10px] font-bold uppercase tracking-widest text-[#717171] hover:border-black hover:text-black transition-colors disabled:opacity-50"
+                >
+                  {isFetchingNextPage && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Load more
+                </button>
+              </div>
+            )}
+          </section>
         </div>
       </div>
 

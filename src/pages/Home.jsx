@@ -8,12 +8,16 @@ import { appPath } from "@/lib/urlHelpers";
 import { usePageMeta } from "@/lib/usePageMeta";
 import AppImage from "@/components/AppImage";
 
-const MARQUEE_NAMES = [
-  "LET HIM COOK AI", "ST: FREELANCER", "PIXVEC", "SPORTSPOOL", "NOTENOTES", "FLUENTCODE",
-  "PROMPTCRM", "SYNAPSE", "BRIEFLY", "MIRRORDB", "HOTSWAP", "ZENMAIL",
-];
+// Fallback marquee — real, approved app names. Only used on the first paint
+// before the live `apps` query resolves (or if it ever returns too few rows),
+// so the strip is never empty and never shows apps that don't exist.
+const FALLBACK_MARQUEE = [
+  "NOTENOTES", "FLUENTCODE", "LET HIM COOK AI", "SPORTS POOLING", "PIXVEC",
+  "STAR TREK: FREELANCER", "FUNDRAISLY", "PUBLORA", "BOND", "GIT WEB ENGINE",
+  "SUPERLOG", "BROWSERBASE",
+].map((name) => ({ name, path: "/gallery" }));
 
-const doubled = [...MARQUEE_NAMES, ...MARQUEE_NAMES];
+const MIN_MARQUEE = 6;
 
 const heroLineVariants = {
   hidden: { opacity: 0, y: 24 },
@@ -46,6 +50,22 @@ export default function Home() {
     () => [...apps].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0)).slice(0, 6),
     [apps]
   );
+
+  // Marquee = real, live app names pulled from the gallery. Dedupe by name,
+  // link each to the app, and fall back to a curated real list until enough
+  // rows have loaded so the strip is never empty or sparse.
+  const marquee = useMemo(() => {
+    const seen = new Set();
+    const items = [];
+    for (const app of apps) {
+      const name = (app.name || "").trim().toUpperCase();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      items.push({ name, path: appPath(app) });
+    }
+    const base = items.length >= MIN_MARQUEE ? items.slice(0, 14) : FALLBACK_MARQUEE;
+    return [...base, ...base];
+  }, [apps]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -113,21 +133,23 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Right 40% — Marquee */}
+        {/* Right 40% — Marquee of real, live app names (pauses on hover so the
+            links underneath are actually clickable). */}
         <div className="w-full md:w-[40%] h-[40vh] md:h-auto overflow-hidden relative flex items-center">
-          <div className="animate-marquee-up flex flex-col w-full">
-            {doubled.map((name, i) => (
+          <div className="animate-marquee-up hover:[animation-play-state:paused] flex flex-col w-full">
+            {marquee.map((item, i) => (
               <div key={i} className="py-3 px-8 border-b border-[#E5E5E5]">
-                <span
-                  className="text-[clamp(2rem,4vw,4rem)] font-black uppercase leading-none"
+                <Link
+                  to={item.path}
+                  className="text-[clamp(2rem,4vw,4rem)] font-black uppercase leading-none transition-opacity hover:opacity-50"
                   style={{
                     WebkitTextStroke: i % 3 === 0 ? "2px #000" : "0px",
                     color: i % 3 === 0 ? "transparent" : "#000",
                     letterSpacing: "-0.04em",
                   }}
                 >
-                  {name}
-                </span>
+                  {item.name}
+                </Link>
               </div>
             ))}
           </div>
